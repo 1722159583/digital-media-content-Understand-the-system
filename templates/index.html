@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>视频精彩片段提取系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
+</head>
+<body>
+
+    <header>
+        <h1>🎬 视频精彩片段提取系统</h1>
+        <span>小组项目 · 方向B</span>
+    </header>
+
+    <main>
+        <!-- 上传区 -->
+        <section class="upload-section">
+            <h2>上传视频</h2>
+            <form id="upload-form">
+                <div class="form-group">
+                    <label>项目名称</label>
+                    <input type="text" id="project_name" value="星港遗迹" />
+                </div>
+                <div class="form-group">
+                    <label>选择视频文件</label>
+                    <input type="file" id="video-file" accept="video/*" required />
+                </div>
+                <div class="form-group">
+                    <label>片段时长（秒）</label>
+                    <input type="number" id="clip_duration" value="6" min="3" max="15" />
+                    <small>以最高分关键帧为中心，前后各扩展一半时长</small>
+                </div>
+                <button type="submit" id="submit-btn">创建任务</button>
+            </form>
+        </section>
+
+        <!-- 任务列表 -->
+        <section class="jobs-section">
+            <h2>📋 任务列表</h2>
+            <div id="job-list">
+                <p class="loading-text">加载任务中...</p>
+            </div>
+        </section>
+
+        <!-- 任务详情（结果展示） -->
+        <section class="detail-section" id="detail-section" style="display:none;">
+            <div class="detail-header">
+                <h2>📄 任务详情</h2>
+                <button id="close-detail">关闭</button>
+            </div>
+            <div id="detail-content">
+                <!-- 由 JS 动态渲染 -->
+            </div>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

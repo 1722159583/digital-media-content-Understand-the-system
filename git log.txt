@@ -1,0 +1,28 @@
+commit 8cd3643b0ccfb23e80c4c4e829e6e63c60e7b543 (HEAD -> main, origin/main, origin/HEAD)
+Merge: 607f823 2262bba
+Author: zmaDuhe <1722159583@qq.com>
+Date:   Sun Jul 19 10:37:42 2026 +0800
+
+    Merge branch 'main' of https://github.com/1722159583/video-extraction
+
+commit 607f8234a0fa7d988aa55c0bdda0883253e2e8d3
+Author: zmaDuhe <1722159583@qq.com>
+Date:   Sun Jul 19 10:36:03 2026 +0800
+
+    PRD.md`、演示流程，成员分工
+
+commit 2262bba879469e858feac1a09e4fb146923f6859
+Author: papaya123533 <3287581373@qq.com>
+Date:   Sun Jul 19 10:18:19 2026 +0800
+
+    Add files via upload
+
+commit d3a7ffadf04a3fcc00c11cbaca9e7a64961aadbd
+Author: papaya123533 <3287581373@qq.com>
+Date:   Sat Jul 18 17:00:27 2026 +0800
+
+    Add files via upload
+
+commit 57c95dba45cd3e2aa4e3a57ba3ec059cea68bb13
+Author: papaya123533 <3287581373@qq.com>
+Date:   Sat Jul 18 16:58:37 2026 +0800
