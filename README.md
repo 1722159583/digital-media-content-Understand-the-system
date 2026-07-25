@@ -28,3 +28,19 @@ python app.py --host 127.0.0.1 --port 7880
 python -m unittest discover -s tests -v
 python -m py_compile app.py
 ```
+
+## 游戏高光数据采集
+
+安装依赖后，默认采集“LOL 五杀”和“CS GO 五杀”各 15 条元数据，并下载前 5 个高清视频：
+
+```powershell
+python crawler/dataset_crawler.py
+```
+
+元数据保存到 `data/dataset_metadata.csv`，视频保存到 `data/videos/`。只更新元数据时运行：
+
+```powershell
+python crawler/dataset_crawler.py --skip-download
+```
+
+可通过 `--keyword "LOL 五杀"` 选择单个关键词；脚本会自动保证总记录数不少于 30。下载数量可通过 `--download-count 5` 至 `--download-count 10` 调整。
