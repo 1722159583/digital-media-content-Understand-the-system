@@ -1,8 +1,11 @@
+.env
 __pycache__/
-*.py[cod]
+*.pyc
+*.py[code]
 outputs/
 .pytest_cache/
 .idea/
 data/videos/
 !data/videos/.gitkeep
 data/*.tmp
+venv/
