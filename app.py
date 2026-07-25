@@ -18,6 +18,7 @@ from werkzeug.utils import secure_filename
 
 # 导入路由
 from routes.auth import auth_bp
+from routes.agent import agent_bp
 
 # 导入 CV 模块（如果存在）
 try:
@@ -72,8 +73,11 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         app.config.update(config)
     Path(app.config["OUTPUT_DIR"]).mkdir(parents=True, exist_ok=True)
 
-    # 注册蓝图
+    # ========== 注册蓝图 ==========
     app.register_blueprint(auth_bp)
+    app.register_blueprint(agent_bp)
+
+    # ========== 辅助函数 ==========
 
     def outputs_dir() -> Path:
         return Path(app.config["OUTPUT_DIR"]).resolve()
@@ -160,6 +164,8 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         finally:
             save_job(directory, job)
 
+    # ========== 路由 ==========
+
     @app.get("/")
     def index():
         return render_template("index.html")
@@ -220,8 +226,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             "settings": settings,
             "result_file": None,
             "error": None,
-            # 新增：关联用户
-            "user_id": request.form.get("user_id")  # 前端从 JWT 获取后传递
+            "user_id": request.form.get("user_id")
         }
         save_job(directory, job)
         return api_response({"job": job}, 201)
