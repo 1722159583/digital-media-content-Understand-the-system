@@ -12,6 +12,174 @@ body {
     min-height: 100vh;
 }
 
+.auth-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 420px;
+    background: #141a20;
+    border: 1px solid #2a313c;
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.auth-header h1 {
+    font-size: 22px;
+    margin-bottom: 8px;
+    color: #e8edf2;
+}
+
+.auth-header p {
+    color: #8a9aa8;
+    font-size: 14px;
+}
+
+.auth-card .form-group {
+    margin-bottom: 18px;
+}
+
+.auth-card .form-group label {
+    display: block;
+    color: #8a9aa8;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.auth-card .form-group input[type="text"],
+.auth-card .form-group input[type="password"],
+.auth-card .form-group input[type="email"],
+.auth-card .form-group select {
+    width: 100%;
+    padding: 12px 14px;
+    background: #0b0e14;
+    border: 1px solid #2a313c;
+    border-radius: 8px;
+    color: #e8edf2;
+    font-size: 15px;
+    transition: border-color 0.2s;
+}
+
+.auth-card .form-group input[type="text"]:focus,
+.auth-card .form-group input[type="password"]:focus,
+.auth-card .form-group input[type="email"]:focus,
+.auth-card .form-group select:focus {
+    outline: none;
+    border-color: #2a6b9c;
+}
+
+.auth-card .form-group small {
+    display: block;
+    color: #6a7a88;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #2a6b9c;
+}
+
+.checkbox-label span {
+    color: #8a9aa8;
+    font-size: 14px;
+}
+
+.btn-primary {
+    width: 100%;
+    background: #2a6b9c;
+    border: none;
+    color: #fff;
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    margin-top: 8px;
+}
+
+.btn-primary:hover {
+    background: #3a7bac;
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.auth-links {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 20px;
+    color: #8a9aa8;
+    font-size: 14px;
+}
+
+.auth-links a {
+    color: #4a8aba;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.auth-links a:hover {
+    color: #6ab0dc;
+}
+
+.error-message {
+    background: rgba(122, 42, 42, 0.2);
+    border: 1px solid #7a2a2a;
+    border-radius: 8px;
+    padding: 12px;
+    color: #ee8888;
+    font-size: 14px;
+    margin-top: 16px;
+    text-align: center;
+}
+
+#auth-loading {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    gap: 16px;
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid #2a313c;
+    border-top-color: #2a6b9c;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
 header {
     display: flex;
     justify-content: space-between;
@@ -21,6 +189,12 @@ header {
     margin-bottom: 24px;
 }
 
+.header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
 header h1 {
     font-size: 24px;
 }
@@ -28,6 +202,41 @@ header h1 {
 header span {
     color: #8a9aa8;
     font-size: 14px;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.user-info .username {
+    font-weight: 600;
+    color: #e8edf2;
+}
+
+.user-info .role {
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #2a4a6a;
+    color: #88bbee;
+}
+
+.btn-logout {
+    background: #3a3a4a;
+    border: none;
+    color: #e8edf2;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-logout:hover {
+    background: #4a4a5a;
 }
 
 main {
@@ -248,6 +457,11 @@ button.secondary:hover {
     color: #88bbee;
 }
 
+.keyframe-card .time {
+    color: #6a7a88;
+    font-size: 12px;
+}
+
 .keyframe-card .actions {
     margin-top: 8px;
     display: flex;
@@ -305,5 +519,10 @@ button.secondary:hover {
     .job-summary,
     .report-grid {
         grid-template-columns: 1fr;
+    }
+    .user-info {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
     }
 }

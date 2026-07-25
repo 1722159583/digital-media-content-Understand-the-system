@@ -3,57 +3,68 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>视频精彩片段提取系统</title>
+    <title>智能数字媒体内容理解系统</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
 </head>
 <body>
+    <div id="auth-loading">
+        <div class="loading-spinner"></div>
+        <p>加载中...</p>
+    </div>
 
-    <header>
-        <h1>🎬 视频精彩片段提取系统</h1>
-        <span>小组项目 · 方向B</span>
-    </header>
-
-    <main>
-        <!-- 上传区 -->
-        <section class="upload-section">
-            <h2>上传视频</h2>
-            <form id="upload-form">
-                <div class="form-group">
-                    <label>项目名称</label>
-                    <input type="text" id="project_name" value="星港遗迹" />
-                </div>
-                <div class="form-group">
-                    <label>选择视频文件</label>
-                    <input type="file" id="video-file" accept="video/*" required />
-                </div>
-                <div class="form-group">
-                    <label>片段时长（秒）</label>
-                    <input type="number" id="clip_duration" value="6" min="3" max="15" />
-                    <small>以最高分关键帧为中心，前后各扩展一半时长</small>
-                </div>
-                <button type="submit" id="submit-btn">创建任务</button>
-            </form>
-        </section>
-
-        <!-- 任务列表 -->
-        <section class="jobs-section">
-            <h2>📋 任务列表</h2>
-            <div id="job-list">
-                <p class="loading-text">加载任务中...</p>
+    <div id="main-app" style="display: none;">
+        <header>
+            <div class="header-left">
+                <h1>🎬 智能数字媒体内容理解系统</h1>
+                <span>基于 YOLO + Agent 的智能分析平台</span>
             </div>
-        </section>
+            <div class="header-right">
+                <div id="user-info" class="user-info">
+                    <span class="username">用户</span>
+                    <span class="role">普通用户</span>
+                    <button id="logout-btn" class="btn-logout">退出登录</button>
+                </div>
+            </div>
+        </header>
 
-        <!-- 任务详情（结果展示） -->
-        <section class="detail-section" id="detail-section" style="display:none;">
-            <div class="detail-header">
-                <h2>📄 任务详情</h2>
-                <button id="close-detail">关闭</button>
-            </div>
-            <div id="detail-content">
-                <!-- 由 JS 动态渲染 -->
-            </div>
-        </section>
-    </main>
+        <main>
+            <section class="upload-section">
+                <h2>上传媒体素材</h2>
+                <form id="upload-form">
+                    <div class="form-group">
+                        <label>项目名称</label>
+                        <input type="text" id="project_name" value="星港遗迹" />
+                    </div>
+                    <div class="form-group">
+                        <label>选择视频文件</label>
+                        <input type="file" id="video-file" accept="video/*" required />
+                    </div>
+                    <div class="form-group">
+                        <label>片段时长（秒）</label>
+                        <input type="number" id="clip_duration" value="6" min="3" max="15" />
+                        <small>以最高分关键帧为中心，前后各扩展一半时长</small>
+                    </div>
+                    <button type="submit" id="submit-btn">创建任务</button>
+                </form>
+            </section>
+
+            <section class="jobs-section">
+                <h2>📋 任务列表</h2>
+                <div id="job-list">
+                    <p class="loading-text">加载任务中...</p>
+                </div>
+            </section>
+
+            <section class="detail-section" id="detail-section" style="display:none;">
+                <div class="detail-header">
+                    <h2>📄 任务详情</h2>
+                    <button id="close-detail">关闭</button>
+                </div>
+                <div id="detail-content">
+                </div>
+            </section>
+        </main>
+    </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

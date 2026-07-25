@@ -146,6 +146,14 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     def index():
         return render_template("index.html")
 
+    @app.get("/login")
+    def login():
+        return render_template("login.html")
+
+    @app.get("/register")
+    def register():
+        return render_template("register.html")
+
     @app.get("/api/health")
     def health():
         try:
@@ -154,6 +162,126 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         except ImportError:
             cv_ready = False
         return api_response({"status": "ok", "model_ready": cv_ready})
+
+    MOCK_USERS = {
+        "admin": {"username": "admin", "password": "admin123", "role": "admin", "email": "admin@test.com", "userId": 1},
+        "user": {"username": "user", "password": "user123", "role": "user", "email": "user@test.com", "userId": 2},
+    }
+
+    @app.post("/api/auth/register")
+    def auth_register():
+        payload = request.get_json(silent=True) or {}
+        username = payload.get("username")
+        password = payload.get("password")
+        email = payload.get("email")
+        role = payload.get("role", "user")
+        
+        if not username or not password or not email:
+            return jsonify({"code": 400, "msg": "请填写所有必填字段", "data": {}, "traceId": ""})
+        
+        if username in MOCK_USERS:
+            return jsonify({"code": 400, "msg": "用户名已存在", "data": {}, "traceId": ""})
+        
+        user_id = len(MOCK_USERS) + 1
+        MOCK_USERS[username] = {
+            "username": username,
+            "password": password,
+            "role": role,
+            "email": email,
+            "userId": user_id,
+        }
+        
+        return jsonify({
+            "code": 200,
+            "msg": "注册成功",
+            "data": {"userId": user_id, "username": username, "role": role},
+            "traceId": ""
+        })
+
+    @app.post("/api/auth/login")
+    def auth_login():
+        payload = request.get_json(silent=True) or {}
+        username = payload.get("username")
+        password = payload.get("password")
+        
+        if not username or not password:
+            return jsonify({"code": 400, "msg": "请填写用户名和密码", "data": {}, "traceId": ""})
+        
+        user = MOCK_USERS.get(username)
+        if not user or user["password"] != password:
+            return jsonify({"code": 401, "msg": "用户名或密码错误", "data": {}, "traceId": ""})
+        
+        access_token = f"mock_jwt_token_{username}_{datetime.now().timestamp()}"
+        refresh_token = f"mock_refresh_token_{username}_{datetime.now().timestamp()}"
+        
+        return jsonify({
+            "code": 200,
+            "msg": "登录成功",
+            "data": {
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "user": {
+                    "userId": user["userId"],
+                    "username": user["username"],
+                    "role": user["role"],
+                    "email": user["email"],
+                },
+                "expires_in": 3600,
+            },
+            "traceId": ""
+        })
+
+    @app.post("/api/auth/logout")
+    def auth_logout():
+        return jsonify({"code": 200, "msg": "退出成功", "data": {}, "traceId": ""})
+
+    @app.get("/api/auth/current")
+    def auth_current():
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return jsonify({"code": 401, "msg": "未登录", "data": {}, "traceId": ""})
+        
+        token = auth_header[7:]
+        username = token.split("_")[3] if len(token.split("_")) > 3 else None
+        user = MOCK_USERS.get(username) if username else None
+        
+        if not user:
+            return jsonify({"code": 401, "msg": "Token无效", "data": {}, "traceId": ""})
+        
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "userId": user["userId"],
+                "username": user["username"],
+                "role": user["role"],
+                "email": user["email"],
+            },
+            "traceId": ""
+        })
+
+    @app.post("/api/auth/refresh")
+    def auth_refresh():
+        payload = request.get_json(silent=True) or {}
+        refresh_token = payload.get("refresh_token")
+        
+        if not refresh_token:
+            return jsonify({"code": 400, "msg": "refresh_token不能为空", "data": {}, "traceId": ""})
+        
+        username = refresh_token.split("_")[3] if len(refresh_token.split("_")) > 3 else None
+        user = MOCK_USERS.get(username) if username else None
+        
+        if not user:
+            return jsonify({"code": 401, "msg": "refresh_token无效", "data": {}, "traceId": ""})
+        
+        new_access_token = f"mock_jwt_token_{username}_{datetime.now().timestamp()}"
+        
+        return jsonify({
+            "code": 200,
+            "msg": "刷新成功",
+            "data": {"access_token": new_access_token, "expires_in": 3600},
+            "traceId": ""
+        })
 
     @app.post("/api/jobs")
     def create_job():
