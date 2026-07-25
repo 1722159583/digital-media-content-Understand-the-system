@@ -16,14 +16,14 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-# 瀵煎叆璺敱
+# 导入路由
 from routes.auth import auth_bp
 
-# 瀵煎叆 CV 妯″潡锛堝鏋滃瓨鍦級
+# 导入 CV 模块（如果存在）
 try:
     from source_code.cv_service import extract_highlights
     CV_AVAILABLE = True
-except ImportError:
+except (ImportError, AttributeError):
     CV_AVAILABLE = False
     extract_highlights = None
 
@@ -72,7 +72,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         app.config.update(config)
     Path(app.config["OUTPUT_DIR"]).mkdir(parents=True, exist_ok=True)
 
-    # 娉ㄥ唽钃濆浘
+    # 注册蓝图
     app.register_blueprint(auth_bp)
 
     def outputs_dir() -> Path:
@@ -129,7 +129,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             "model": result.get("model", "yolo11n"),
             "parameters": result.get("parameters", {}),
             "processing_time": result.get("processing_time", 0),
-            "message": "鍒嗘瀽瀹屾垚锛屽彲鏌ョ湅骞跺鏍告帹鑽愮簿褰╃墖娈点€?,
+            "message": "分析完成，可查看并审核推荐精彩片段。",
         }
 
     def run_analysis(job_id: str) -> None:
@@ -140,7 +140,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         save_job(directory, job)
 
         if not CV_AVAILABLE:
-            job.update(status="failed", completed_at=utc_now(), error="CV 妯″潡鏈氨缁?)
+            job.update(status="failed", completed_at=utc_now(), error="CV 模块未就绪")
             save_job(directory, job)
             return
 
@@ -149,7 +149,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             job_dir = directory
             result = extract_highlights(video_path, output_dir=job_dir)
             if result.get("status") == "failed":
-                raise RuntimeError(result.get("error", "瑙嗛鍒嗘瀽澶辫触"))
+                raise RuntimeError(result.get("error", "视频分析失败"))
             report = build_report(directory, job, result)
             write_json(directory / "analysis_report.json", report)
             job.update(status="completed", completed_at=utc_now(), result_file="analysis_report.json")
@@ -169,7 +169,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         try:
             import cv2
             cv_ready = True
-        except ImportError:
+        except (ImportError, AttributeError):
             cv_ready = False
         return api_response({
             "status": "ok",
@@ -181,15 +181,15 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     def create_job():
         upload = request.files.get("file")
         if not upload or not upload.filename:
-            return api_error("璇蜂娇鐢?file 瀛楁涓婁紶瑙嗛鏂囦欢")
+            return api_error("请使用 file 字段上传视频文件")
         if not allowed_file(upload.filename):
-            return api_error(f"涓嶆敮鎸佺殑鏂囦欢鏍煎紡锛屼粎鏀寔锛歿', '.join(sorted(ALLOWED_EXTENSIONS))}")
+            return api_error(f"不支持的文件格式，仅支持：{', '.join(sorted(ALLOWED_EXTENSIONS))}")
         if request.content_length is not None and request.content_length <= 0:
-            return api_error("涓嶅厑璁镐笂浼犵┖鏂囦欢")
+            return api_error("不允许上传空文件")
 
         filename = secure_filename(upload.filename)
         if not filename:
-            return api_error("鏂囦欢鍚嶆棤鏁?)
+            return api_error("文件名无效")
         job_id = f"{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:8]}"
         directory = outputs_dir() / job_id
         input_dir = directory / "input"
@@ -198,7 +198,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         upload.save(target)
         if target.stat().st_size == 0:
             shutil.rmtree(directory)
-            return api_error("涓嶅厑璁镐笂浼犵┖鏂囦欢")
+            return api_error("不允许上传空文件")
 
         settings: dict[str, Any] = {}
         raw_settings = request.form.get("settings")
@@ -207,11 +207,11 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
                 settings = json.loads(raw_settings)
             except json.JSONDecodeError:
                 shutil.rmtree(directory)
-                return api_error("settings 蹇呴』鏄悎娉?JSON")
+                return api_error("settings 必须是合法 JSON")
 
         job = {
             "job_id": job_id,
-            "project_name": request.form.get("project_name", "瑙嗛绮惧僵鐗囨鎻愬彇"),
+            "project_name": request.form.get("project_name", "视频精彩片段提取"),
             "asset_name": filename,
             "status": "created",
             "created_at": utc_now(),
@@ -220,8 +220,8 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             "settings": settings,
             "result_file": None,
             "error": None,
-            # 鏂板锛氬叧鑱旂敤鎴?
-            "user_id": request.form.get("user_id")  # 鍓嶇浠?JWT 鑾峰彇鍚庝紶閫?
+            # 新增：关联用户
+            "user_id": request.form.get("user_id")  # 前端从 JWT 获取后传递
         }
         save_job(directory, job)
         return api_response({"job": job}, 201)
@@ -244,17 +244,17 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     @app.get("/api/jobs/<job_id>")
     def get_job_endpoint(job_id: str):
         _, job = get_job(job_id)
-        return api_response({"job": job}) if job else api_error("浠诲姟涓嶅瓨鍦?, 404)
+        return api_response({"job": job}) if job else api_error("任务不存在", 404)
 
     @app.post("/api/jobs/<job_id>/analyze")
     def analyze_job(job_id: str):
         directory, job = get_job(job_id)
         if not directory or not job:
-            return api_error("浠诲姟涓嶅瓨鍦?, 404)
+            return api_error("任务不存在", 404)
         if job["status"] in {"queued", "running"}:
-            return api_error("浠诲姟姝ｅ湪澶勭悊涓?, 409)
+            return api_error("任务正在处理中", 409)
         if job["status"] == "completed":
-            return api_error("浠诲姟宸插畬鎴愶紱璇锋柊寤轰换鍔′互閲嶆柊鍒嗘瀽", 409)
+            return api_error("任务已完成；请新建任务以重新分析", 409)
         job["status"] = "queued"
         job["error"] = None
         save_job(directory, job)
@@ -269,19 +269,19 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     def review_job(job_id: str):
         directory, job = get_job(job_id)
         if not directory or not job:
-            return api_error("浠诲姟涓嶅瓨鍦?, 404)
+            return api_error("任务不存在", 404)
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
-            return api_error("璇锋眰浣撳繀椤绘槸 JSON 瀵硅薄")
+            return api_error("请求体必须是 JSON 对象")
         keyframe_id = payload.get("keyframe_id")
         if not isinstance(keyframe_id, str) or not keyframe_id:
-            return api_error("keyframe_id 涓哄繀濉」")
+            return api_error("keyframe_id 为必填项")
         action = payload.get("action")
         if action not in {"keep", "ignore"}:
-            return api_error("action 蹇呴』涓?keep 鎴?ignore")
+            return api_error("action 必须为 keep 或 ignore")
         report_path = directory / "analysis_report.json"
         if not report_path.exists():
-            return api_error("鍒嗘瀽缁撴灉灏氭湭鐢熸垚", 409)
+            return api_error("分析结果尚未生成", 409)
         report = load_json(report_path)
         for keyframe in report.get("keyframes", []):
             if keyframe.get("id") == keyframe_id:
@@ -290,36 +290,36 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
                 keyframe["note"] = payload.get("note", keyframe.get("note", ""))
                 write_json(report_path, report)
                 return api_response({"keyframe": keyframe})
-        return api_error("鍏抽敭甯т笉瀛樺湪", 404)
+        return api_error("关键帧不存在", 404)
 
     @app.post("/api/jobs/<job_id>/rough-cut")
     def rough_cut(job_id: str):
         directory, job = get_job(job_id)
         if not directory or not job:
-            return api_error("浠诲姟涓嶅瓨鍦?, 404)
+            return api_error("任务不存在", 404)
         if job["status"] != "completed":
-            return api_error("鍒嗘瀽瀹屾垚鍚庢墠鑳界敓鎴愮矖鍓棰?, 409)
-        return api_error("绮楀壀鍔熻兘绛夊緟 FFmpeg 妯″潡鎺ュ叆", 501)
+            return api_error("分析完成后才能生成粗剪视频", 409)
+        return api_error("粗剪功能等待 FFmpeg 模块接入", 501)
 
     @app.get("/api/jobs/<job_id>/report")
     def report(job_id: str):
         directory, job = get_job(job_id)
         if not directory or not job:
-            return api_error("浠诲姟涓嶅瓨鍦?, 404)
+            return api_error("任务不存在", 404)
         if not job.get("result_file"):
-            return api_error("鍒嗘瀽缁撴灉灏氭湭鐢熸垚", 409)
+            return api_error("分析结果尚未生成", 409)
         report_path = directory / job["result_file"]
         if not report_path.is_file():
-            return api_error("缁撴灉鏂囦欢涓㈠け", 500)
+            return api_error("结果文件丢失", 500)
         return api_response({"report": load_json(report_path)})
 
     @app.delete("/api/jobs/<job_id>")
     def delete_job(job_id: str):
         directory, job = get_job(job_id)
         if not directory or not job:
-            return api_error("浠诲姟涓嶅瓨鍦?, 404)
+            return api_error("任务不存在", 404)
         if job["status"] in {"queued", "running"}:
-            return api_error("姝ｅ湪澶勭悊鐨勪换鍔′笉鑳藉垹闄?, 409)
+            return api_error("正在处理的任务不能删除", 409)
         shutil.rmtree(directory)
         return api_response({"job_id": job_id})
 
@@ -327,13 +327,14 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     def output_file(job_id: str, filename: str):
         directory, _ = get_job(job_id)
         if not directory:
-            return api_error("浠诲姟涓嶅瓨鍦?, 404)
+            return api_error("任务不存在", 404)
         return send_from_directory(directory, filename)
 
     return app
 
 
 app = create_app()
+
 
 # 注册 Agent 分析路由（申化涛）
 from routes.analysis import register_agent_routes
