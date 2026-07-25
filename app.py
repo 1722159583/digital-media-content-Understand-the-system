@@ -11,6 +11,8 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from routes.knowledge import knowledge_bp
+from routes.stats import stats_bp
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_cors import CORS
@@ -69,6 +71,8 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     # ========== 注册蓝图 ==========
     app.register_blueprint(auth_bp)
     app.register_blueprint(agent_bp)
+    app.register_blueprint(knowledge_bp)
+    app.register_blueprint(stats_bp)
 
     # ========== 辅助函数 ==========
 
