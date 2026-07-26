@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>数据可视化 - 智能数字媒体内容理解系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+    <div id="auth-loading">
+        <div class="loading-spinner"></div>
+        <p>加载中...</p>
+    </div>
+
+    <div id="main-app" style="display: none;">
+        <header>
+            <div class="header-left">
+                <h1>🎬 智能数字媒体内容理解系统</h1>
+                <span>基于 YOLO + Agent 的智能分析平台</span>
+            </div>
+            <div class="header-right">
+                <div id="user-info" class="user-info">
+                    <span class="username">用户</span>
+                    <span class="role">普通用户</span>
+                    <button id="logout-btn" class="btn-logout">退出登录</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="main-nav">
+            <a href="/" class="nav-item">📊 任务管理</a>
+            <a href="/kb/manage" class="nav-item">📚 知识库管理</a>
+            <a href="/kb/search" class="nav-item">🔍 知识库检索</a>
+            <a href="/agent/analysis" class="nav-item">🤖 Agent分析</a>
+            <a href="/visualization" class="nav-item active">📈 数据可视化</a>
+        </nav>
+
+        <main>
+            <section class="visualization-section">
+                <div class="section-header">
+                    <h2>📈 数据可视化统计</h2>
+                    <button id="refresh-charts-btn" class="btn-primary">刷新数据</button>
+                </div>
+
+                <div class="charts-grid">
+                    <div class="chart-card">
+                        <h3>📊 检测类别统计</h3>
+                        <div id="class-dist-chart" class="chart-container"></div>
+                    </div>
+
+                    <div class="chart-card">
+                        <h3>📉 置信度分布</h3>
+                        <div id="confidence-chart" class="chart-container"></div>
+                    </div>
+
+                    <div class="chart-card full-width">
+                        <h3>🎬 视频时间段分析</h3>
+                        <div class="time-chart-controls">
+                            <select id="video-task-select">
+                                <option value="">选择检测任务</option>
+                            </select>
+                        </div>
+                        <div id="video-time-chart" class="chart-container"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

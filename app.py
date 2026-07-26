@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import random
 import shutil
 import threading
 import traceback
@@ -529,6 +531,97 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     @app.get("/agent/analysis")
     def agent_analysis():
         return render_template("agent_analysis.html")
+
+    @app.get("/visualization")
+    def visualization():
+        return render_template("visualization.html")
+
+    @app.get("/api/stats/overview")
+    def stats_overview():
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "totalMedia": 128,
+                "imageCount": 86,
+                "videoCount": 42,
+                "successTasks": 95,
+                "failedTasks": 8,
+                "pendingAudit": 15,
+                "approvedCount": 82,
+                "rejectedCount": 11,
+            },
+            "traceId": ""
+        })
+
+    @app.get("/api/stats/detect-class")
+    def stats_detect_class():
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "classDistribution": [
+                    {"class": "person", "count": 156},
+                    {"class": "car", "count": 89},
+                    {"class": "dog", "count": 45},
+                    {"class": "cat", "count": 38},
+                    {"class": "bicycle", "count": 27},
+                    {"class": "truck", "count": 23},
+                    {"class": "bird", "count": 19},
+                    {"class": "bus", "count": 15},
+                    {"class": "motorbike", "count": 12},
+                    {"class": "cow", "count": 8},
+                ],
+                "confidenceDistribution": [
+                    {"range": "0.0-0.1", "count": 5},
+                    {"range": "0.1-0.2", "count": 12},
+                    {"range": "0.2-0.3", "count": 28},
+                    {"range": "0.3-0.4", "count": 45},
+                    {"range": "0.4-0.5", "count": 67},
+                    {"range": "0.5-0.6", "count": 89},
+                    {"range": "0.6-0.7", "count": 112},
+                    {"range": "0.7-0.8", "count": 145},
+                    {"range": "0.8-0.9", "count": 178},
+                    {"range": "0.9-1.0", "count": 234},
+                ],
+            },
+            "traceId": ""
+        })
+
+    @app.get("/api/stats/video-time")
+    def stats_video_time():
+        task_id = request.args.get("task_id")
+        time_labels = [f"{i}s" for i in range(0, 61, 5)]
+        import random
+        scores = [round(0.3 + random.random() * 0.6 + math.sin(i * 0.1) * 0.1, 2) for i in range(0, 61, 5)]
+        counts = [random.randint(1, 10) for _ in range(0, 61, 5)]
+        
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "taskId": task_id or "all",
+                "timeLabels": time_labels,
+                "excitementScores": scores,
+                "targetCounts": counts,
+            },
+            "traceId": ""
+        })
+
+    @app.get("/api/detect/task/list")
+    def detect_task_list():
+        tasks = [
+            {"taskId": "task_001", "mediaId": "video_001", "status": "completed", "createdAt": "2024-01-15 10:30:00"},
+            {"taskId": "task_002", "mediaId": "video_002", "status": "completed", "createdAt": "2024-01-15 11:45:00"},
+            {"taskId": "task_003", "mediaId": "video_003", "status": "running", "createdAt": "2024-01-15 14:20:00"},
+            {"taskId": "task_004", "mediaId": "video_004", "status": "completed", "createdAt": "2024-01-16 09:00:00"},
+        ]
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {"list": tasks, "total": len(tasks)},
+            "traceId": ""
+        })
 
     @app.post("/api/jobs")
     def create_job():

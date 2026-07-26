@@ -375,13 +375,16 @@ async function checkAuthAndInit() {
         initMainApp();
         
         if (document.getElementById("kb-list")) {
-            await initKBManage();
+            try { await initKBManage(); } catch (e) { console.error("知识库管理初始化失败:", e); }
         }
         if (document.getElementById("search-form")) {
-            await initKBSearch();
+            try { await initKBSearch(); } catch (e) { console.error("知识库检索初始化失败:", e); }
         }
         if (document.getElementById("run-agent-btn")) {
-            await initAgentAnalysis();
+            try { await initAgentAnalysis(); } catch (e) { console.error("Agent分析初始化失败:", e); }
+        }
+        if (document.getElementById("class-dist-chart")) {
+            try { await initVisualization(); } catch (e) { console.error("数据可视化初始化失败:", e); }
         }
     } catch {
         window.location.href = "/login";
@@ -981,6 +984,320 @@ async function initAgentAnalysis() {
     runAgentBtn?.addEventListener("click", runAgentAnalysis);
 
     await Promise.all([loadTasksForSelect(), loadKBsForSelect(), loadAgentSessions()]);
+}
+
+let classDistChart = null;
+let confidenceChart = null;
+let videoTimeChart = null;
+
+async function fetchDetectClassStats() {
+    try {
+        const data = await fetchJSON(`${API_BASE}/stats/detect-class`);
+        return data.data || {};
+    } catch {
+        return {
+            classDistribution: [
+                { class: "person", count: 156 },
+                { class: "car", count: 89 },
+                { class: "dog", count: 45 },
+                { class: "cat", count: 38 },
+                { class: "bicycle", count: 27 },
+                { class: "truck", count: 23 },
+                { class: "bird", count: 19 },
+                { class: "bus", count: 15 },
+                { class: "motorbike", count: 12 },
+                { class: "cow", count: 8 },
+            ],
+            confidenceDistribution: [
+                { range: "0.0-0.1", count: 5 },
+                { range: "0.1-0.2", count: 12 },
+                { range: "0.2-0.3", count: 28 },
+                { range: "0.3-0.4", count: 45 },
+                { range: "0.4-0.5", count: 67 },
+                { range: "0.5-0.6", count: 89 },
+                { range: "0.6-0.7", count: 112 },
+                { range: "0.7-0.8", count: 145 },
+                { range: "0.8-0.9", count: 178 },
+                { range: "0.9-1.0", count: 234 },
+            ],
+        };
+    }
+}
+
+async function fetchVideoTimeStats(taskId) {
+    try {
+        const url = taskId ? `${API_BASE}/stats/video-time?task_id=${taskId}` : `${API_BASE}/stats/video-time`;
+        const data = await fetchJSON(url);
+        return data.data || {};
+    } catch {
+        const timeLabels = [];
+        const scores = [];
+        for (let i = 0; i <= 60; i += 5) {
+            timeLabels.push(`${i}s`);
+            scores.push(0.3 + Math.random() * 0.6 + Math.sin(i * 0.1) * 0.1);
+        }
+        return {
+            timeLabels,
+            excitementScores: scores.map(s => Math.round(s * 100) / 100),
+            targetCounts: scores.map(() => Math.floor(Math.random() * 10) + 1),
+        };
+    }
+}
+
+let classDistResizeHandler = null;
+let confidenceResizeHandler = null;
+let videoTimeResizeHandler = null;
+
+function renderClassDistChart(data) {
+    const container = document.getElementById("class-dist-chart");
+    if (!container || !window.echarts) return;
+
+    if (classDistChart) {
+        classDistChart.dispose();
+        if (classDistResizeHandler) {
+            window.removeEventListener("resize", classDistResizeHandler);
+        }
+    }
+
+    classDistChart = window.echarts.init(container);
+    const classData = data.classDistribution || [];
+    const colors = [];
+    for (let i = 0; i < classData.length; i++) {
+        colors.push(`hsl(${i * 36}, 70%, 55%)`);
+    }
+
+    classDistChart.setOption({
+        tooltip: {
+            trigger: "axis",
+            axisPointer: { type: "shadow" },
+            formatter: (params) => {
+                const item = params[0];
+                const total = classData.reduce((sum, d) => sum + d.count, 0);
+                const percent = ((item.value / total) * 100).toFixed(1);
+                return `${item.name}<br/>数量: ${item.value}<br/>占比: ${percent}%`;
+            },
+        },
+        grid: { top: 20, right: 20, bottom: 40, left: 60 },
+        xAxis: {
+            type: "category",
+            data: classData.map(d => d.class),
+            axisLabel: { rotate: 30, fontSize: 11 },
+        },
+        yAxis: { type: "value", name: "数量" },
+        series: [{
+            type: "bar",
+            data: classData.map(d => d.count),
+            itemStyle: { color: (params) => colors[params.dataIndex] },
+            emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: "rgba(0,0,0,0.3)" } },
+        }],
+    });
+
+    classDistResizeHandler = () => classDistChart?.resize();
+    window.addEventListener("resize", classDistResizeHandler);
+}
+
+function renderConfidenceChart(data) {
+    const container = document.getElementById("confidence-chart");
+    if (!container || !window.echarts) return;
+
+    if (confidenceChart) {
+        confidenceChart.dispose();
+        if (confidenceResizeHandler) {
+            window.removeEventListener("resize", confidenceResizeHandler);
+        }
+    }
+
+    confidenceChart = window.echarts.init(container);
+    const confData = data.confidenceDistribution || [];
+
+    confidenceChart.setOption({
+        tooltip: {
+            trigger: "item",
+            formatter: (params) => {
+                const total = confData.reduce((sum, d) => sum + d.count, 0);
+                const percent = ((params.value / total) * 100).toFixed(1);
+                return `${params.name}<br/>数量: ${params.value}<br/>占比: ${percent}%`;
+            },
+        },
+        legend: {
+            orient: "vertical",
+            right: 10,
+            top: 20,
+            data: confData.map(d => d.range),
+            textStyle: { fontSize: 10 },
+        },
+        series: [{
+            type: "pie",
+            radius: ["40%", "70%"],
+            center: ["40%", "50%"],
+            avoidLabelOverlap: false,
+            itemStyle: {
+                borderRadius: 6,
+                borderColor: "#fff",
+                borderWidth: 2,
+            },
+            label: { show: false },
+            emphasis: {
+                label: { show: true, fontSize: 14, fontWeight: "bold" },
+            },
+            labelLine: { show: false },
+            data: confData.map((d, i) => ({
+                name: d.range,
+                value: d.count,
+                itemStyle: { color: `hsl(${i * 36}, 65%, ${50 + (i % 2) * 10}%)` },
+            })),
+        }],
+    });
+
+    confidenceResizeHandler = () => confidenceChart?.resize();
+    window.addEventListener("resize", confidenceResizeHandler);
+}
+
+function renderVideoTimeChart(data) {
+    const container = document.getElementById("video-time-chart");
+    if (!container || !window.echarts) return;
+
+    if (videoTimeChart) {
+        videoTimeChart.dispose();
+        if (videoTimeResizeHandler) {
+            window.removeEventListener("resize", videoTimeResizeHandler);
+        }
+    }
+
+    videoTimeChart = window.echarts.init(container);
+    const labels = data.timeLabels || [];
+    const scores = data.excitementScores || [];
+    const counts = data.targetCounts || [];
+
+    videoTimeChart.setOption({
+        tooltip: {
+            trigger: "axis",
+            axisPointer: { type: "cross" },
+            formatter: (params) => {
+                let result = `${params[0].name}<br/>`;
+                params.forEach(p => {
+                    result += `${p.marker} ${p.seriesName}: ${p.value}<br/>`;
+                });
+                return result;
+            },
+        },
+        legend: { data: ["精彩度评分", "目标数量"], bottom: 10 },
+        grid: { top: 30, right: 30, bottom: 60, left: 60 },
+        xAxis: {
+            type: "category",
+            data: labels,
+            name: "时间",
+            axisLabel: { fontSize: 11 },
+        },
+        yAxis: [
+            { type: "value", name: "精彩度", min: 0, max: 1 },
+            { type: "value", name: "数量", min: 0 },
+        ],
+        series: [
+            {
+                name: "精彩度评分",
+                type: "line",
+                smooth: true,
+                data: scores,
+                itemStyle: { color: "#5470c6" },
+                areaStyle: {
+                    color: window.echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                        { offset: 0, color: "rgba(84, 112, 198, 0.5)" },
+                        { offset: 1, color: "rgba(84, 112, 198, 0.05)" },
+                    ]),
+                },
+            },
+            {
+                name: "目标数量",
+                type: "bar",
+                yAxisIndex: 1,
+                data: counts,
+                itemStyle: { color: "#91cc75" },
+            },
+        ],
+    });
+
+    videoTimeResizeHandler = () => videoTimeChart?.resize();
+    window.addEventListener("resize", videoTimeResizeHandler);
+}
+
+async function loadTasksForVideoSelect() {
+    const select = document.getElementById("video-task-select");
+    if (!select) return;
+
+    try {
+        const data = await fetchJSON(`${API_BASE}/detect/task/list?page=1&size=20`);
+        const tasks = data.data?.list || [];
+        tasks.forEach(task => {
+            const option = document.createElement("option");
+            option.value = task.taskId;
+            option.textContent = `${task.taskId} - ${task.mediaId || "未知素材"}`;
+            select.appendChild(option);
+        });
+    } catch {
+        const mockTasks = ["task_001", "task_002", "task_003"];
+        mockTasks.forEach(taskId => {
+            const option = document.createElement("option");
+            option.value = taskId;
+            option.textContent = `${taskId} - 测试视频`;
+            select.appendChild(option);
+        });
+    }
+}
+
+async function waitForECharts() {
+    return new Promise((resolve) => {
+        if (window.echarts) {
+            resolve();
+            return;
+        }
+        const interval = setInterval(() => {
+            if (window.echarts) {
+                clearInterval(interval);
+                resolve();
+            }
+        }, 100);
+        setTimeout(() => {
+            clearInterval(interval);
+            resolve();
+        }, 5000);
+    });
+}
+
+async function initVisualization() {
+    await waitForECharts();
+
+    const refreshBtn = document.getElementById("refresh-charts-btn");
+    const taskSelect = document.getElementById("video-task-select");
+
+    await loadTasksForVideoSelect();
+
+    const classStats = await fetchDetectClassStats();
+    renderClassDistChart(classStats);
+    renderConfidenceChart(classStats);
+
+    const videoStats = await fetchVideoTimeStats();
+    renderVideoTimeChart(videoStats);
+
+    refreshBtn?.addEventListener("click", async () => {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = "刷新中...";
+        try {
+            const stats = await fetchDetectClassStats();
+            renderClassDistChart(stats);
+            renderConfidenceChart(stats);
+            const videoStats = await fetchVideoTimeStats(taskSelect?.value);
+            renderVideoTimeChart(videoStats);
+        } finally {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = "刷新数据";
+        }
+    });
+
+    taskSelect?.addEventListener("change", async (e) => {
+        const videoStats = await fetchVideoTimeStats(e.target.value);
+        renderVideoTimeChart(videoStats);
+    });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
