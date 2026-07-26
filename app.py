@@ -1,4 +1,4 @@
-"""Flask API for the video highlight extraction workspace."""
+﻿"""Flask API for the video highlight extraction workspace."""
 
 from __future__ import annotations
 
@@ -13,8 +13,20 @@ from pathlib import Path
 from typing import Any
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
-from source_code.cv_service import extract_highlights, load_model
+from flask_cors import CORS
 from werkzeug.utils import secure_filename
+
+# 导入路由
+from routes.auth import auth_bp
+
+# 导入 CV 模块（如果存在）
+try:
+    from source_code.cv_service import extract_highlights, load_model
+    CV_AVAILABLE = True
+except (ImportError, AttributeError):
+    CV_AVAILABLE = False
+    extract_highlights = None
+    load_model = None
 
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_OUTPUT_DIR = BASE_DIR / "outputs"
@@ -52,6 +64,7 @@ def allowed_file(filename: str) -> bool:
 
 def create_app(config: dict[str, Any] | None = None) -> Flask:
     app = Flask(__name__)
+    CORS(app)
     app.config.from_mapping(
         OUTPUT_DIR=DEFAULT_OUTPUT_DIR,
         MAX_CONTENT_LENGTH=2 * 1024 * 1024 * 1024,
@@ -61,11 +74,13 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         app.config.update(config)
     Path(app.config["OUTPUT_DIR"]).mkdir(parents=True, exist_ok=True)
 
+    # 注册蓝图
+    app.register_blueprint(auth_bp)
+
     def outputs_dir() -> Path:
         return Path(app.config["OUTPUT_DIR"]).resolve()
 
     def job_dir(job_id: str) -> Path | None:
-        # A UUID-based id is the only valid directory identifier, which prevents path traversal.
         if not job_id or any(char not in "0123456789abcdef_" for char in job_id):
             return None
         candidate = (outputs_dir() / job_id).resolve()
@@ -85,7 +100,6 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         write_json(directory / "job.json", job)
 
     def build_report(directory: Path, job: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
-        """Adapt the CV module result to the report contract consumed by the web UI."""
         video_info = result.get("video_info", {})
         highlights = result.get("highlights", [])
         keyframes = []
@@ -137,6 +151,12 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             return
         job.update(status="running", started_at=utc_now(), error=None)
         save_job(directory, job)
+
+        if not CV_AVAILABLE:
+            job.update(status="failed", completed_at=utc_now(), error="CV 模块未就绪")
+            save_job(directory, job)
+            return
+
         try:
             video_path = next((directory / "input").iterdir())
             job_dir = directory
@@ -146,7 +166,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             report = build_report(directory, job, result)
             write_json(directory / "analysis_report.json", report)
             job.update(status="completed", completed_at=utc_now(), result_file="analysis_report.json")
-        except Exception as error:  # Persist failures so they remain visible after restart.
+        except Exception as error:
             job.update(status="failed", completed_at=utc_now(), error=str(error))
             app.logger.exception("Analysis failed for job %s", job_id)
             write_json(directory / "error.json", {"error": str(error), "traceback": traceback.format_exc()})
@@ -162,10 +182,15 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         try:
             import cv2  # noqa: F401
             from source_code.cv_config import MODEL_PATH
-            cv_ready = MODEL_PATH.is_file()
-        except ImportError:
+            cv_ready = CV_AVAILABLE and MODEL_PATH.is_file()
+        except (ImportError, AttributeError):
             cv_ready = False
-        return api_response({"status": "ok", "model_ready": cv_ready, "task": "penta_kill_detection"})
+        return api_response({
+            "status": "ok",
+            "model_ready": cv_ready,
+            "cv_available": CV_AVAILABLE,
+            "task": "penta_kill_detection",
+        })
 
     @app.post("/api/jobs")
     def create_job():
@@ -189,6 +214,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         if target.stat().st_size == 0:
             shutil.rmtree(directory)
             return api_error("不允许上传空文件")
+
         settings: dict[str, Any] = {}
         raw_settings = request.form.get("settings")
         if raw_settings:
@@ -197,20 +223,34 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             except json.JSONDecodeError:
                 shutil.rmtree(directory)
                 return api_error("settings 必须是合法 JSON")
+
         job = {
-            "job_id": job_id, "project_name": request.form.get("project_name", "视频精彩片段提取"),
-            "asset_name": filename, "status": "created", "created_at": utc_now(), "started_at": None,
-            "completed_at": None, "settings": settings, "result_file": None, "error": None,
+            "job_id": job_id,
+            "project_name": request.form.get("project_name", "视频精彩片段提取"),
+            "asset_name": filename,
+            "status": "created",
+            "created_at": utc_now(),
+            "started_at": None,
+            "completed_at": None,
+            "settings": settings,
+            "result_file": None,
+            "error": None,
+            # 新增：关联用户
+            "user_id": request.form.get("user_id")  # 前端从 JWT 获取后传递
         }
         save_job(directory, job)
         return api_response({"job": job}, 201)
 
     @app.get("/api/jobs")
     def list_jobs():
+        user_id = request.args.get("user_id")
         jobs = []
         for metadata in outputs_dir().glob("*/job.json"):
             try:
-                jobs.append(load_json(metadata))
+                job = load_json(metadata)
+                if user_id and job.get("user_id") != user_id:
+                    continue
+                jobs.append(job)
             except (OSError, json.JSONDecodeError):
                 app.logger.warning("Ignoring unreadable metadata: %s", metadata)
         jobs.sort(key=lambda item: item.get("created_at", ""), reverse=True)
@@ -310,6 +350,11 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
 
 app = create_app()
 
+
+# 注册 Agent 分析路由（申化涛）
+from routes.analysis import register_agent_routes
+register_agent_routes(app)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
@@ -317,6 +362,8 @@ if __name__ == "__main__":
     parser.add_argument("--skip-model-preload", action="store_true", help="跳过启动阶段的模型预热")
     args = parser.parse_args()
     if not args.skip_model_preload:
+        if not CV_AVAILABLE or load_model is None:
+            raise RuntimeError("CV 模块未就绪，无法预热五杀检测模型")
         print("正在预热五杀检测模型...")
         load_model()
         print("模型预热完成。")

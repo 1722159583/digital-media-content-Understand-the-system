@@ -1,5 +1,7 @@
+.env
 __pycache__/
-*.py[cod]
+*.pyc
+*.py[code]
 outputs/
 .pytest_cache/
 .idea/
@@ -14,3 +16,4 @@ data_acquisition/runs/
 data_acquisition/annotations/auto_anylabeling/
 /runs/
 /yolo26n.pt
+venv/
