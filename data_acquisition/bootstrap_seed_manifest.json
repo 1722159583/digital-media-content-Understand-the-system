@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "class_names": ["penta_kill", "multi_kill", "kill_feed"],
+  "coordinate_format": "normalized_xyxy",
+  "images": [
+    {
+      "path": "data_acquisition/raw_images/lol/lol_33da41c5814e60ce.jpg",
+      "split": "train",
+      "boxes": [{"class_name": "penta_kill", "xyxy": [0.20, 0.08, 0.80, 0.96]}]
+    },
+    {
+      "path": "data_acquisition/raw_images/lol/lol_3d2c93967c12d878.jpg",
+      "split": "train",
+      "boxes": [{"class_name": "penta_kill", "xyxy": [0.28, 0.05, 0.73, 0.86]}]
+    },
+    {
+      "path": "data_acquisition/raw_images/lol/lol_42873972004427e8.jpg",
+      "split": "train",
+      "boxes": [{"class_name": "penta_kill", "xyxy": [0.28, 0.13, 0.74, 0.91]}]
+    },
+    {
+      "path": "data_acquisition/raw_images/lol/lol_4d27be28d9730f1a.jpg",
+      "split": "train",
+      "boxes": [{"class_name": "penta_kill", "xyxy": [0.29, 0.10, 0.72, 0.74]}]
+    },
+    {
+      "path": "data_acquisition/raw_images/lol/lol_54ce95d431b5accb.jpg",
+      "split": "train",
+      "boxes": [{"class_name": "penta_kill", "xyxy": [0.24, 0.25, 0.77, 0.93]}]
+    },
+    {
+      "path": "data_acquisition/raw_images/lol/lol_61f8f42b6e91951b.jpg",
+      "split": "train",
+      "boxes": [{"class_name": "penta_kill", "xyxy": [0.29, 0.10, 0.72, 0.74]}]
+    },
+    {
+      "path": "data_acquisition/raw_images/lol/lol_64ece09b7899a785.jpg",
+      "split": "train",
+      "boxes": [{"class_name": "penta_kill", "xyxy": [0.20, 0.07, 0.80, 0.97]}]
+    },
+    {
+      "path": "data_acquisition/raw_images/lol/lol_cebbe0e3bfeafa23.jpg",
+      "split": "train",
+      "boxes": [{"class_name": "multi_kill", "xyxy": [0.52, 0.64, 0.70, 0.75]}]
+    },
+    {
+      "path": "data_acquisition/raw_images/csgo/csgo_0537f927b6f2564c.jpg",
+      "split": "train",
+      "boxes": [
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.035, 0.995, 0.075]},
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.075, 0.995, 0.11]},
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.11, 0.995, 0.145]},
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.145, 0.995, 0.18]}
+      ]
+    },
+    {
+      "path": "data_acquisition/raw_images/csgo/csgo_0d5f464172845415.jpg",
+      "split": "train",
+      "boxes": [
+        {"class_name": "kill_feed", "xyxy": [0.83, 0.055, 0.995, 0.095]},
+        {"class_name": "kill_feed", "xyxy": [0.83, 0.095, 0.995, 0.135]},
+        {"class_name": "kill_feed", "xyxy": [0.83, 0.135, 0.995, 0.175]}
+      ]
+    },
+    {
+      "path": "data_acquisition/raw_images/csgo/csgo_0fad7bb29b95cbbb.jpg",
+      "split": "train",
+      "boxes": [
+        {"class_name": "kill_feed", "xyxy": [0.83, 0.055, 0.995, 0.095]},
+        {"class_name": "kill_feed", "xyxy": [0.83, 0.095, 0.995, 0.135]},
+        {"class_name": "kill_feed", "xyxy": [0.83, 0.135, 0.995, 0.175]}
+      ]
+    },
+    {
+      "path": "data_acquisition/raw_images/csgo/csgo_16c3be171ac16931.jpg",
+      "split": "train",
+      "boxes": [
+        {"class_name": "kill_feed", "xyxy": [0.69, 0.03, 0.995, 0.075]},
+        {"class_name": "kill_feed", "xyxy": [0.69, 0.075, 0.995, 0.12]},
+        {"class_name": "kill_feed", "xyxy": [0.69, 0.12, 0.995, 0.165]}
+      ]
+    },
+    {
+      "path": "data_acquisition/raw_images/csgo/csgo_1cc42d5669b1c932.jpg",
+      "split": "train",
+      "boxes": [{"class_name": "kill_feed", "xyxy": [0.84, 0.055, 0.995, 0.105]}]
+    },
+    {
+      "path": "data_acquisition/raw_images/csgo/csgo_1d21e16f44404196.jpg",
+      "split": "train",
+      "boxes": [
+        {"class_name": "kill_feed", "xyxy": [0.83, 0.04, 0.995, 0.08]},
+        {"class_name": "kill_feed", "xyxy": [0.83, 0.08, 0.995, 0.12]},
+        {"class_name": "kill_feed", "xyxy": [0.83, 0.12, 0.995, 0.16]}
+      ]
+    },
+    {
+      "path": "data_acquisition/raw_images/csgo/csgo_22710cd8cb6bfcbd.jpg",
+      "split": "train",
+      "boxes": [
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.035, 0.995, 0.07]},
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.07, 0.995, 0.105]},
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.105, 0.995, 0.14]},
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.14, 0.995, 0.175]},
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.175, 0.995, 0.21]}
+      ]
+    },
+    {
+      "path": "data_acquisition/raw_images/csgo/csgo_2647779005217b57.jpg",
+      "split": "train",
+      "boxes": []
+    },
+    {
+      "path": "data_acquisition/raw_images/lol/lol_7df3314f6adee6e6.jpg",
+      "split": "val",
+      "boxes": [{"class_name": "penta_kill", "xyxy": [0.38, 0.20, 0.68, 0.64]}]
+    },
+    {
+      "path": "data_acquisition/raw_images/lol/lol_970e36baa3b5bcc7.jpg",
+      "split": "val",
+      "boxes": [{"class_name": "penta_kill", "xyxy": [0.24, 0.06, 0.77, 0.95]}]
+    },
+    {
+      "path": "data_acquisition/raw_images/csgo/csgo_24cbb1957b8f2940.jpg",
+      "split": "val",
+      "boxes": [
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.035, 0.995, 0.075]},
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.075, 0.995, 0.115]},
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.115, 0.995, 0.155]},
+        {"class_name": "kill_feed", "xyxy": [0.82, 0.155, 0.995, 0.195]}
+      ]
+    },
+    {
+      "path": "data_acquisition/raw_images/csgo/csgo_268ab96908a728cb.jpg",
+      "split": "val",
+      "boxes": []
+    }
+  ]
+}

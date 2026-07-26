@@ -1,0 +1,3 @@
+penta_kill
+multi_kill
+kill_feed

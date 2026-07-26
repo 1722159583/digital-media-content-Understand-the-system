@@ -1,0 +1,105 @@
+{
+  "version": "2.5.4",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          1574.3999999999999,
+          37.800000000000004
+        ],
+        [
+          1910.4,
+          75.60000000000001
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    },
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          1574.3999999999999,
+          75.60000000000001
+        ],
+        [
+          1910.4,
+          113.39999999999999
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    },
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          1574.3999999999999,
+          113.39999999999999
+        ],
+        [
+          1910.4,
+          151.20000000000002
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    },
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          1574.3999999999999,
+          151.20000000000002
+        ],
+        [
+          1910.4,
+          189.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    },
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          1574.3999999999999,
+          189.0
+        ],
+        [
+          1910.4,
+          226.79999999999998
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    }
+  ],
+  "imagePath": "F:\\shiXun\\end\\digital-media-content-Understand-the-system\\data_acquisition\\raw_images\\csgo\\csgo_22710cd8cb6bfcbd.jpg",
+  "imageData": null,
+  "imageHeight": 1080,
+  "imageWidth": 1920
+}

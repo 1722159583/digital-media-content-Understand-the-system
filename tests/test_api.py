@@ -21,10 +21,13 @@ class ApiTestCase(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def create_job(self, content=b"not-a-real-video"):
+    def create_job(self, content=b"not-a-real-video", settings=None):
+        data = {"file": (io.BytesIO(content), "sample.mp4"), "project_name": "接口测试"}
+        if settings is not None:
+            data["settings"] = json.dumps(settings)
         return self.client.post(
             "/api/jobs",
-            data={"file": (io.BytesIO(content), "sample.mp4"), "project_name": "接口测试"},
+            data=data,
             content_type="multipart/form-data",
         )
 
@@ -82,11 +85,14 @@ class ApiTestCase(unittest.TestCase):
             "parameters": {},
             "processing_time": 0.3,
         }
-        job = self.create_job().json["job"]
+        settings = {"confidence_threshold": 0.5, "tracking": False}
+        job = self.create_job(settings=settings).json["job"]
 
         analyzed = self.client.post(f"/api/jobs/{job['job_id']}/analyze")
         self.assertEqual(analyzed.status_code, 202)
         self.assertEqual(self.client.get(f"/api/jobs/{job['job_id']}").json["job"]["status"], "completed")
+        extract_highlights.assert_called_once()
+        self.assertEqual(extract_highlights.call_args.kwargs["settings"], settings)
 
         report = self.client.get(f"/api/jobs/{job['job_id']}/report").json["report"]
         self.assertEqual(report["video"]["duration"], 8.0)

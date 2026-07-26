@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
-from source_code.cv_service import extract_highlights
+from source_code.cv_service import extract_highlights, load_model
 from werkzeug.utils import secure_filename
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -114,10 +114,21 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             },
             "highlights": highlights,
             "keyframes": keyframes,
-            "model": result.get("model", "yolo11n"),
+            "detections": result.get("detections", []),
+            "detection_count": result.get("detection_count", 0),
+            "trajectories": result.get("trajectories", []),
+            "score_summary": result.get("score_summary", {}),
+            "low_confidence_or_no_detection": result.get("low_confidence_or_no_detection", False),
+            "model": result.get("model", {}),
+            "model_warnings": result.get("model_warnings", []),
             "parameters": result.get("parameters", {}),
             "processing_time": result.get("processing_time", 0),
-            "message": "分析完成，可查看并审核推荐精彩片段。",
+            "performance_target_met": result.get("performance_target_met"),
+            "message": (
+                "分析完成，但未检测到达到阈值的五杀画面，请人工复核。"
+                if result.get("low_confidence_or_no_detection")
+                else "分析完成，可查看并审核五杀候选片段。"
+            ),
         }
 
     def run_analysis(job_id: str) -> None:
@@ -129,7 +140,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         try:
             video_path = next((directory / "input").iterdir())
             job_dir = directory
-            result = extract_highlights(video_path, output_dir=job_dir)
+            result = extract_highlights(video_path, output_dir=job_dir, settings=job.get("settings", {}))
             if result.get("status") == "failed":
                 raise RuntimeError(result.get("error", "视频分析失败"))
             report = build_report(directory, job, result)
@@ -150,10 +161,11 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     def health():
         try:
             import cv2  # noqa: F401
-            cv_ready = True
+            from source_code.cv_config import MODEL_PATH
+            cv_ready = MODEL_PATH.is_file()
         except ImportError:
             cv_ready = False
-        return api_response({"status": "ok", "model_ready": cv_ready})
+        return api_response({"status": "ok", "model_ready": cv_ready, "task": "penta_kill_detection"})
 
     @app.post("/api/jobs")
     def create_job():
@@ -302,5 +314,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=7880, type=int)
+    parser.add_argument("--skip-model-preload", action="store_true", help="跳过启动阶段的模型预热")
     args = parser.parse_args()
+    if not args.skip_model_preload:
+        print("正在预热五杀检测模型...")
+        load_model()
+        print("模型预热完成。")
     app.run(host=args.host, port=args.port, debug=False)

@@ -1,0 +1,27 @@
+{
+  "version": "0.4.36",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "multi_kill",
+      "text": "",
+      "points": [
+        [
+          375.03691275167785,
+          84.45190156599551
+        ],
+        [
+          509.7125279642057,
+          144.407158836689
+        ]
+      ],
+      "group_id": null,
+      "shape_type": "rectangle",
+      "flags": {}
+    }
+  ],
+  "imagePath": "..\\..\\..\\raw_images\\lol\\lol_7a20e3db5894b53b.jpg",
+  "imageData": null,
+  "imageHeight": 500,
+  "imageWidth": 889
+}

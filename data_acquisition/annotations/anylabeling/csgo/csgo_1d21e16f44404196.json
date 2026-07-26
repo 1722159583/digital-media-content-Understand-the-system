@@ -1,0 +1,67 @@
+{
+  "version": "2.5.4",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          1434.24,
+          43.2
+        ],
+        [
+          1719.36,
+          86.4
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    },
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          1434.24,
+          86.4
+        ],
+        [
+          1719.36,
+          129.6
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    },
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          1434.24,
+          129.6
+        ],
+        [
+          1719.36,
+          172.8
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    }
+  ],
+  "imagePath": "F:\\shiXun\\end\\digital-media-content-Understand-the-system\\data_acquisition\\raw_images\\csgo\\csgo_1d21e16f44404196.jpg",
+  "imageData": null,
+  "imageHeight": 1080,
+  "imageWidth": 1728
+}

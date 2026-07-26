@@ -1,0 +1,86 @@
+{
+  "version": "2.5.4",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          728.9799999999999,
+          17.5
+        ],
+        [
+          884.555,
+          37.5
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    },
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          728.9799999999999,
+          37.5
+        ],
+        [
+          884.555,
+          55.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    },
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          728.9799999999999,
+          55.0
+        ],
+        [
+          884.555,
+          72.5
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    },
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          728.9799999999999,
+          72.5
+        ],
+        [
+          884.555,
+          90.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    }
+  ],
+  "imagePath": "F:\\shiXun\\end\\digital-media-content-Understand-the-system\\data_acquisition\\raw_images\\csgo\\csgo_0537f927b6f2564c.jpg",
+  "imageData": null,
+  "imageHeight": 500,
+  "imageWidth": 889
+}

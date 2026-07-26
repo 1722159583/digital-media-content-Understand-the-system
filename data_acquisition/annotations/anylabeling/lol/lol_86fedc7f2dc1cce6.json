@@ -1,0 +1,27 @@
+{
+  "version": "0.4.36",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "penta_kill",
+      "text": "",
+      "points": [
+        [
+          564.018018018018,
+          63.42792792792794
+        ],
+        [
+          627.6816816816815,
+          89.85435435435436
+        ]
+      ],
+      "group_id": null,
+      "shape_type": "rectangle",
+      "flags": {}
+    }
+  ],
+  "imagePath": "..\\..\\..\\raw_images\\lol\\lol_86fedc7f2dc1cce6.jpg",
+  "imageData": null,
+  "imageHeight": 671,
+  "imageWidth": 1192
+}

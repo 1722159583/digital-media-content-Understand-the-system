@@ -1,0 +1,29 @@
+{
+  "version": "2.5.4",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "kill_feed",
+      "points": [
+        [
+          2867.7599999999998,
+          105.6
+        ],
+        [
+          3396.93,
+          201.6
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {}
+    }
+  ],
+  "imagePath": "F:\\shiXun\\end\\digital-media-content-Understand-the-system\\data_acquisition\\raw_images\\csgo\\csgo_1cc42d5669b1c932.jpg",
+  "imageData": null,
+  "imageHeight": 1920,
+  "imageWidth": 3414
+}

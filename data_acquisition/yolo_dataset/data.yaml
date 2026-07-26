@@ -1,0 +1,8 @@
+# 数据集路径配置（使用相对于 data.yaml 的相对路径即可）
+train: ./train/images
+val: ./val/images
+test: ./test/images
+
+# 类别配置
+nc: 3
+names: ['penta_kill', 'multi_kill', 'kill_feed' ]

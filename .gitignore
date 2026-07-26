@@ -6,3 +6,11 @@ outputs/
 data/videos/
 !data/videos/.gitkeep
 data/*.tmp
+data_acquisition/raw_images/
+data_acquisition/*.tmp
+data_acquisition/yolo_dataset/**/images/
+data_acquisition/yolo_dataset/**/*.cache
+data_acquisition/runs/
+data_acquisition/annotations/auto_anylabeling/
+/runs/
+/yolo26n.pt
