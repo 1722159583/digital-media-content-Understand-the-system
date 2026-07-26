@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>多模型对比 - 智能数字媒体内容理解系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+</head>
+<body>
+    <div id="auth-loading">
+        <div class="loading-spinner"></div>
+        <p>加载中...</p>
+    </div>
+
+    <div id="main-app" style="display: none;">
+        <header>
+            <div class="header-left">
+                <h1>🎬 智能数字媒体内容理解系统</h1>
+                <span>基于 YOLO + Agent 的智能分析平台</span>
+            </div>
+            <div class="header-right">
+                <div id="user-info" class="user-info">
+                    <span class="username">用户</span>
+                    <span class="role">普通用户</span>
+                    <button id="logout-btn" class="btn-logout">退出登录</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="main-nav">
+            <a href="/" class="nav-item">📊 任务管理</a>
+            <a href="/kb/manage" class="nav-item">📚 知识库管理</a>
+            <a href="/kb/search" class="nav-item">🔍 知识库检索</a>
+            <a href="/agent/analysis" class="nav-item">🤖 Agent分析</a>
+            <a href="/visualization" class="nav-item">📈 数据可视化</a>
+            <a href="/stats" class="nav-item">📊 统计分析</a>
+            <a href="/model/compare" class="nav-item active">⚡ 多模型对比</a>
+        </nav>
+
+        <main>
+            <section id="model-compare-section" class="model-compare-section">
+                <div class="section-header">
+                    <h2>⚡ 多模型对比分析</h2>
+                    <button id="compare-btn" class="btn-primary">开始对比</button>
+                </div>
+
+                <div class="compare-config">
+                    <div class="config-panel">
+                        <h3>📦 模型选择</h3>
+                        <div class="model-checkboxes">
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="model" value="yolov8n" checked>
+                                <span>YOLOv8n (nano)</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="model" value="yolov8s" checked>
+                                <span>YOLOv8s (small)</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="model" value="yolov8m" checked>
+                                <span>YOLOv8m (medium)</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="model" value="yolov8l">
+                                <span>YOLOv8l (large)</span>
+                            </label>
+                            <label class="checkbox-item">
+                                <input type="checkbox" name="model" value="yolov8x">
+                                <span>YOLOv8x (extra large)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="config-panel">
+                        <h3>🎚️ 阈值设置</h3>
+                        <div class="threshold-settings">
+                            <div class="threshold-item">
+                                <label>置信度阈值 (Confidence)</label>
+                                <div class="slider-container">
+                                    <input type="range" id="conf-threshold" min="0" max="1" step="0.05" value="0.5">
+                                    <span class="slider-value" id="conf-value">0.50</span>
+                                </div>
+                            </div>
+                            <div class="threshold-item">
+                                <label>IOU阈值 (NMS)</label>
+                                <div class="slider-container">
+                                    <input type="range" id="iou-threshold" min="0" max="1" step="0.05" value="0.45">
+                                    <span class="slider-value" id="iou-value">0.45</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="compare-results">
+                    <div class="results-chart">
+                        <h3>📊 Precision/Recall 对比图</h3>
+                        <div id="pr-chart" class="chart-container"></div>
+                    </div>
+
+                    <div class="results-table">
+                        <h3>📋 详细指标对比</h3>
+                        <table class="stats-table">
+                            <thead>
+                                <tr>
+                                    <th>模型</th>
+                                    <th>Precision</th>
+                                    <th>Recall</th>
+                                    <th>mAP50</th>
+                                    <th>mAP50-95</th>
+                                    <th>推理耗时(ms)</th>
+                                    <th>模型大小(MB)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="compare-table-body">
+                                <tr><td colspan="7" class="loading-text">点击"开始对比"按钮获取数据</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

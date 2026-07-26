@@ -536,20 +536,27 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     def visualization():
         return render_template("visualization.html")
 
+    @app.get("/stats")
+    def stats():
+        return render_template("stats.html")
+
+    @app.get("/model/compare")
+    def model_compare():
+        return render_template("model_compare.html")
+
     @app.get("/api/stats/overview")
     def stats_overview():
         return jsonify({
             "code": 200,
             "msg": "success",
             "data": {
+                "totalTasks": 128,
+                "completedTasks": 98,
+                "pendingTasks": 15,
+                "failedTasks": 15,
                 "totalMedia": 128,
                 "imageCount": 86,
                 "videoCount": 42,
-                "successTasks": 95,
-                "failedTasks": 8,
-                "pendingAudit": 15,
-                "approvedCount": 82,
-                "rejectedCount": 11,
             },
             "traceId": ""
         })
@@ -583,6 +590,99 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
                     {"range": "0.7-0.8", "count": 145},
                     {"range": "0.8-0.9", "count": 178},
                     {"range": "0.9-1.0", "count": 234},
+                ],
+            },
+            "traceId": ""
+        })
+
+    @app.get("/api/stats/audit-status")
+    def stats_audit_status():
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "passCount": 45,
+                "reviewCount": 23,
+                "rejectCount": 12,
+                "totalCount": 80,
+            },
+            "traceId": ""
+        })
+
+    @app.post("/api/stats/model-metric")
+    def stats_model_metric():
+        payload = request.get_json(silent=True) or {}
+        models = payload.get("models", [])
+        conf_threshold = payload.get("conf_threshold", 0.5)
+        iou_threshold = payload.get("iou_threshold", 0.45)
+
+        model_metrics = {
+            "yolov8n": {"precision": 0.852, "recall": 0.786, "map50": 0.821, "map50_95": 0.583, "inferenceTime": 8, "modelSize": 6},
+            "yolov8s": {"precision": 0.875, "recall": 0.821, "map50": 0.856, "map50_95": 0.632, "inferenceTime": 15, "modelSize": 14},
+            "yolov8m": {"precision": 0.891, "recall": 0.845, "map50": 0.878, "map50_95": 0.678, "inferenceTime": 28, "modelSize": 28},
+            "yolov8l": {"precision": 0.903, "recall": 0.862, "map50": 0.892, "map50_95": 0.701, "inferenceTime": 45, "modelSize": 48},
+            "yolov8x": {"precision": 0.912, "recall": 0.875, "map50": 0.901, "map50_95": 0.715, "inferenceTime": 68, "modelSize": 64},
+        }
+
+        filtered_metrics = []
+        for model in models:
+            if model in model_metrics:
+                filtered_metrics.append({"model": model, **model_metrics[model]})
+
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "metrics": filtered_metrics,
+                "conf_threshold": conf_threshold,
+                "iou_threshold": iou_threshold,
+            },
+            "traceId": ""
+        })
+
+    @app.post("/api/detect/task/compare")
+    def detect_task_compare():
+        payload = request.get_json(silent=True) or {}
+        media_id = payload.get("mediaId")
+        model_params = payload.get("modelParams", [])
+        threshold_params = payload.get("thresholdParams", {})
+
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {
+                "mediaId": media_id,
+                "comparisons": [
+                    {
+                        "model": "yolov8n",
+                        "confidenceThreshold": threshold_params.get("confidence", 0.5),
+                        "precision": 0.852,
+                        "recall": 0.786,
+                        "mAP50": 0.821,
+                        "mAP50_95": 0.583,
+                        "detectionCount": 156,
+                        "inferenceTime": 8,
+                    },
+                    {
+                        "model": "yolov8s",
+                        "confidenceThreshold": threshold_params.get("confidence", 0.5),
+                        "precision": 0.875,
+                        "recall": 0.821,
+                        "mAP50": 0.856,
+                        "mAP50_95": 0.632,
+                        "detectionCount": 168,
+                        "inferenceTime": 15,
+                    },
+                    {
+                        "model": "yolov8m",
+                        "confidenceThreshold": threshold_params.get("confidence", 0.5),
+                        "precision": 0.891,
+                        "recall": 0.845,
+                        "mAP50": 0.878,
+                        "mAP50_95": 0.678,
+                        "detectionCount": 175,
+                        "inferenceTime": 28,
+                    },
                 ],
             },
             "traceId": ""

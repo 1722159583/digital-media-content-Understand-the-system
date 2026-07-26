@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>统计分析 - 智能数字媒体内容理解系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
+</head>
+<body>
+    <div id="auth-loading">
+        <div class="loading-spinner"></div>
+        <p>加载中...</p>
+    </div>
+
+    <div id="main-app" style="display: none;">
+        <header>
+            <div class="header-left">
+                <h1>🎬 智能数字媒体内容理解系统</h1>
+                <span>基于 YOLO + Agent 的智能分析平台</span>
+            </div>
+            <div class="header-right">
+                <div id="user-info" class="user-info">
+                    <span class="username">用户</span>
+                    <span class="role">普通用户</span>
+                    <button id="logout-btn" class="btn-logout">退出登录</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="main-nav">
+            <a href="/" class="nav-item">📊 任务管理</a>
+            <a href="/kb/manage" class="nav-item">📚 知识库管理</a>
+            <a href="/kb/search" class="nav-item">🔍 知识库检索</a>
+            <a href="/agent/analysis" class="nav-item">🤖 Agent分析</a>
+            <a href="/visualization" class="nav-item">📈 数据可视化</a>
+            <a href="/stats" class="nav-item active">📊 统计分析</a>
+            <a href="/model/compare" class="nav-item">⚡ 多模型对比</a>
+        </nav>
+
+        <main>
+            <section id="stats-section" class="stats-section">
+                <div class="section-header">
+                    <h2>📊 统计分析概览</h2>
+                    <button id="refresh-stats-btn" class="btn-primary">刷新数据</button>
+                </div>
+
+                <div class="stats-cards-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">📋</div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="total-tasks">0</div>
+                            <div class="stat-label">总任务数</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card stat-success">
+                        <div class="stat-icon">✅</div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="completed-tasks">0</div>
+                            <div class="stat-label">完成任务数</div>
+                        </div>
+                        <div class="stat-progress">
+                            <div class="progress-bar" id="completed-progress"><span id="completed-rate">0%</span></div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card stat-warning">
+                        <div class="stat-icon">⏳</div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="pending-tasks">0</div>
+                            <div class="stat-label">进行中任务</div>
+                        </div>
+                        <div class="stat-progress">
+                            <div class="progress-bar progress-warning" id="pending-progress"><span id="pending-rate">0%</span></div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card stat-error">
+                        <div class="stat-icon">❌</div>
+                        <div class="stat-info">
+                            <div class="stat-value" id="failed-tasks">0</div>
+                            <div class="stat-label">失败任务数</div>
+                        </div>
+                        <div class="stat-progress">
+                            <div class="progress-bar progress-error" id="failed-progress"><span id="failed-rate">0%</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-row">
+                    <div class="stats-panel">
+                        <h3>✅ 审核状态统计</h3>
+                        <div class="audit-stats-grid">
+                            <div class="audit-stat-item audit-pass">
+                                <div class="audit-value" id="audit-pass-count">0</div>
+                                <div class="audit-label">通过</div>
+                                <div class="audit-percentage" id="audit-pass-percent">0%</div>
+                            </div>
+                            <div class="audit-stat-item audit-review">
+                                <div class="audit-value" id="audit-review-count">0</div>
+                                <div class="audit-label">待复核</div>
+                                <div class="audit-percentage" id="audit-review-percent">0%</div>
+                            </div>
+                            <div class="audit-stat-item audit-reject">
+                                <div class="audit-value" id="audit-reject-count">0</div>
+                                <div class="audit-label">不通过</div>
+                                <div class="audit-percentage" id="audit-reject-percent">0%</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="stats-panel">
+                        <h3>🎯 检测类别统计</h3>
+                        <div id="detect-class-table-container">
+                            <table class="stats-table">
+                                <thead>
+                                    <tr>
+                                        <th>排名</th>
+                                        <th>类别名称</th>
+                                        <th>检测数量</th>
+                                        <th>占比</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="detect-class-body">
+                                    <tr><td colspan="4" class="loading-text">加载中...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

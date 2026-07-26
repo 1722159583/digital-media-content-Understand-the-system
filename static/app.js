@@ -389,6 +389,12 @@ async function checkAuthAndInit() {
         if (document.getElementById("class-dist-chart")) {
             try { await initVisualization(); } catch (e) { console.error("数据可视化初始化失败:", e); }
         }
+        if (document.getElementById("stats-section")) {
+            try { await initStatsPage(); } catch (e) { console.error("统计分析初始化失败:", e); }
+        }
+        if (document.getElementById("model-compare-section")) {
+            try { await initModelCompare(); } catch (e) { console.error("多模型对比初始化失败:", e); }
+        }
     } catch {
         window.location.href = "/login";
     }
@@ -1240,7 +1246,7 @@ let videoTimeChart = null;
 async function fetchDetectClassStats() {
     try {
         const data = await fetchJSON(`${API_BASE}/stats/detect-class`);
-        return data.data || {};
+        return getResponseData(data);
     } catch {
         return {
             classDistribution: [
@@ -1275,7 +1281,7 @@ async function fetchVideoTimeStats(taskId) {
     try {
         const url = taskId ? `${API_BASE}/stats/video-time?task_id=${taskId}` : `${API_BASE}/stats/video-time`;
         const data = await fetchJSON(url);
-        return data.data || {};
+        return getResponseData(data);
     } catch {
         const timeLabels = [];
         const scores = [];
@@ -1545,6 +1551,317 @@ async function initVisualization() {
     taskSelect?.addEventListener("change", async (e) => {
         const videoStats = await fetchVideoTimeStats(e.target.value);
         renderVideoTimeChart(videoStats);
+    });
+}
+
+async function fetchStatsOverview() {
+    try {
+        const data = await fetchJSON(`${API_BASE}/stats/overview`);
+        const responseData = getResponseData(data);
+        return responseData;
+    } catch {
+        return {
+            totalTasks: 128,
+            completedTasks: 98,
+            pendingTasks: 15,
+            failedTasks: 15,
+            totalMedia: 256,
+            imageCount: 180,
+            videoCount: 76,
+        };
+    }
+}
+
+async function fetchAuditStatusStats() {
+    try {
+        const data = await fetchJSON(`${API_BASE}/stats/audit-status`);
+        const responseData = getResponseData(data);
+        return responseData;
+    } catch {
+        return {
+            passCount: 45,
+            reviewCount: 23,
+            rejectCount: 12,
+            totalCount: 80,
+        };
+    }
+}
+
+function renderTaskStats(stats) {
+    const totalTasks = stats.totalTasks || 0;
+    const completedTasks = stats.completedTasks || 0;
+    const pendingTasks = stats.pendingTasks || 0;
+    const failedTasks = stats.failedTasks || 0;
+
+    const elTotal = document.getElementById("total-tasks");
+    if (elTotal) elTotal.textContent = totalTasks;
+    const elCompleted = document.getElementById("completed-tasks");
+    if (elCompleted) elCompleted.textContent = completedTasks;
+    const elPending = document.getElementById("pending-tasks");
+    if (elPending) elPending.textContent = pendingTasks;
+    const elFailed = document.getElementById("failed-tasks");
+    if (elFailed) elFailed.textContent = failedTasks;
+
+    const completedRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    const pendingRate = totalTasks > 0 ? Math.round((pendingTasks / totalTasks) * 100) : 0;
+    const failedRate = totalTasks > 0 ? Math.round((failedTasks / totalTasks) * 100) : 0;
+
+    const elCompletedRate = document.getElementById("completed-rate");
+    if (elCompletedRate) elCompletedRate.textContent = `${completedRate}%`;
+    const elCompletedProgress = document.getElementById("completed-progress");
+    if (elCompletedProgress) elCompletedProgress.style.width = `${completedRate}%`;
+
+    const elPendingRate = document.getElementById("pending-rate");
+    if (elPendingRate) elPendingRate.textContent = `${pendingRate}%`;
+    const elPendingProgress = document.getElementById("pending-progress");
+    if (elPendingProgress) elPendingProgress.style.width = `${pendingRate}%`;
+
+    const elFailedRate = document.getElementById("failed-rate");
+    if (elFailedRate) elFailedRate.textContent = `${failedRate}%`;
+    const elFailedProgress = document.getElementById("failed-progress");
+    if (elFailedProgress) elFailedProgress.style.width = `${failedRate}%`;
+}
+
+function renderAuditStats(stats) {
+    const passCount = stats.passCount || 0;
+    const reviewCount = stats.reviewCount || 0;
+    const rejectCount = stats.rejectCount || 0;
+    const totalCount = stats.totalCount || passCount + reviewCount + rejectCount;
+
+    const elPass = document.getElementById("audit-pass-count");
+    if (elPass) elPass.textContent = passCount;
+    const elReview = document.getElementById("audit-review-count");
+    if (elReview) elReview.textContent = reviewCount;
+    const elReject = document.getElementById("audit-reject-count");
+    if (elReject) elReject.textContent = rejectCount;
+
+    const passPercent = totalCount > 0 ? Math.round((passCount / totalCount) * 100) : 0;
+    const reviewPercent = totalCount > 0 ? Math.round((reviewCount / totalCount) * 100) : 0;
+    const rejectPercent = totalCount > 0 ? Math.round((rejectCount / totalCount) * 100) : 0;
+
+    const elPassPercent = document.getElementById("audit-pass-percent");
+    if (elPassPercent) elPassPercent.textContent = `${passPercent}%`;
+    const elReviewPercent = document.getElementById("audit-review-percent");
+    if (elReviewPercent) elReviewPercent.textContent = `${reviewPercent}%`;
+    const elRejectPercent = document.getElementById("audit-reject-percent");
+    if (elRejectPercent) elRejectPercent.textContent = `${rejectPercent}%`;
+}
+
+function renderDetectClassTable(stats) {
+    const classDistribution = stats.classDistribution || [];
+    const tbody = document.getElementById("detect-class-body");
+    
+    if (!tbody) return;
+
+    if (!classDistribution.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="loading-text">暂无检测类别数据</td></tr>';
+        return;
+    }
+
+    const total = classDistribution.reduce((sum, item) => sum + (item.count || 0), 0);
+
+    tbody.innerHTML = classDistribution.map((item, index) => {
+        const percent = total > 0 ? ((item.count || 0) / total * 100).toFixed(1) : 0;
+        return `
+            <tr>
+                <td>${index + 1}</td>
+                <td>${escapeHtml(item.class || "-")}</td>
+                <td>${item.count || 0}</td>
+                <td>${percent}%</td>
+            </tr>
+        `;
+    }).join("");
+}
+
+function initStatsPage() {
+    const refreshBtn = document.getElementById("refresh-stats-btn");
+
+    async function loadStats() {
+        try {
+            const overviewStats = await fetchStatsOverview();
+            const auditStats = await fetchAuditStatusStats();
+            const detectStats = await fetchDetectClassStats();
+
+            renderTaskStats(overviewStats);
+            renderAuditStats(auditStats);
+            renderDetectClassTable(detectStats);
+        } catch (error) {
+            console.error("加载统计数据失败:", error);
+        }
+    }
+
+    loadStats();
+
+    refreshBtn?.addEventListener("click", async () => {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = "刷新中...";
+        try {
+            await loadStats();
+        } finally {
+            refreshBtn.disabled = false;
+            refreshBtn.textContent = "刷新数据";
+        }
+    });
+}
+
+let prChartInstance = null;
+
+async function fetchModelMetrics(models, confThreshold, iouThreshold) {
+    try {
+        const data = await fetchJSON(`${API_BASE}/stats/model-metric`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ models, conf_threshold: confThreshold, iou_threshold: iouThreshold }),
+        });
+        return getResponseData(data);
+    } catch {
+        return {
+            metrics: [
+                { model: "yolov8n", precision: 0.852, recall: 0.786, map50: 0.821, map50_95: 0.583, inferenceTime: 8, modelSize: 6 },
+                { model: "yolov8s", precision: 0.875, recall: 0.821, map50: 0.856, map50_95: 0.632, inferenceTime: 15, modelSize: 14 },
+                { model: "yolov8m", precision: 0.891, recall: 0.845, map50: 0.878, map50_95: 0.678, inferenceTime: 28, modelSize: 28 },
+                { model: "yolov8l", precision: 0.903, recall: 0.862, map50: 0.892, map50_95: 0.701, inferenceTime: 45, modelSize: 48 },
+                { model: "yolov8x", precision: 0.912, recall: 0.875, map50: 0.901, map50_95: 0.715, inferenceTime: 68, modelSize: 64 },
+            ].filter(m => models.includes(m.model)),
+        };
+    }
+}
+
+function renderCompareTable(metrics) {
+    const tbody = document.getElementById("compare-table-body");
+    if (!tbody) return;
+
+    if (!metrics || !metrics.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="loading-text">暂无数据</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = metrics.map(item => `
+        <tr>
+            <td>${escapeHtml(item.model || "-")}</td>
+            <td>${(item.precision * 100).toFixed(1)}%</td>
+            <td>${(item.recall * 100).toFixed(1)}%</td>
+            <td>${(item.map50 * 100).toFixed(1)}%</td>
+            <td>${(item.map50_95 * 100).toFixed(1)}%</td>
+            <td>${item.inferenceTime} ms</td>
+            <td>${item.modelSize} MB</td>
+        </tr>
+    `).join("");
+}
+
+function renderPRChart(metrics) {
+    const chartDom = document.getElementById("pr-chart");
+    if (!chartDom) return;
+
+    if (!prChartInstance) {
+        prChartInstance = echarts.init(chartDom);
+        window.addEventListener("resize", () => { prChartInstance && prChartInstance.resize(); });
+    }
+
+    if (!metrics || !metrics.length) {
+        prChartInstance.setOption({ title: { text: "暂无数据", left: "center", top: "center" } });
+        return;
+    }
+
+    const colors = ["#5470c6", "#91cc75", "#fac858", "#ee6666", "#73c0de"];
+
+    const series = metrics.map((item, index) => ({
+        name: item.model,
+        type: "scatter",
+        data: [[item.recall * 100, item.precision * 100]],
+        symbolSize: 20,
+        itemStyle: { color: colors[index % colors.length] },
+        label: { show: true, formatter: `${(item.precision * 100).toFixed(0)}%`, position: "top" },
+    }));
+
+    series.push({
+        name: "PR曲线趋势",
+        type: "line",
+        data: metrics.sort((a, b) => a.recall - b.recall).map(item => [item.recall * 100, item.precision * 100]),
+        smooth: true,
+        lineStyle: { color: "#91cc75", width: 2, type: "dashed" },
+        showSymbol: false,
+        areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: "rgba(145, 204, 117, 0.3)" }, { offset: 1, color: "rgba(145, 204, 117, 0)" }]) },
+    });
+
+    prChartInstance.setOption({
+        tooltip: {
+            trigger: "item",
+            formatter: (params) => {
+                if (params.seriesName === "PR曲线趋势") return "";
+                const item = metrics.find(m => m.model === params.name);
+                if (!item) return "";
+                return `<div style="padding: 8px;">
+                    <strong>${item.model}</strong><br/>
+                    Precision: ${(item.precision * 100).toFixed(1)}%<br/>
+                    Recall: ${(item.recall * 100).toFixed(1)}%<br/>
+                    mAP50: ${(item.map50 * 100).toFixed(1)}%<br/>
+                    mAP50-95: ${(item.map50_95 * 100).toFixed(1)}%
+                </div>`;
+            },
+        },
+        legend: { data: metrics.map(m => m.model), bottom: 10 },
+        grid: { left: "10%", right: "10%", top: "15%", bottom: "20%" },
+        xAxis: {
+            type: "value",
+            name: "Recall (%)",
+            min: 60,
+            max: 100,
+            axisLabel: { formatter: "{value}%" },
+        },
+        yAxis: {
+            type: "value",
+            name: "Precision (%)",
+            min: 70,
+            max: 100,
+            axisLabel: { formatter: "{value}%" },
+        },
+        series: series,
+    });
+}
+
+function initModelCompare() {
+    const compareBtn = document.getElementById("compare-btn");
+    const confSlider = document.getElementById("conf-threshold");
+    const confValue = document.getElementById("conf-value");
+    const iouSlider = document.getElementById("iou-threshold");
+    const iouValue = document.getElementById("iou-value");
+
+    confSlider?.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value);
+        if (confValue) confValue.textContent = val.toFixed(2);
+    });
+
+    iouSlider?.addEventListener("input", (e) => {
+        const val = parseFloat(e.target.value);
+        if (iouValue) iouValue.textContent = val.toFixed(2);
+    });
+
+    compareBtn?.addEventListener("click", async () => {
+        const selectedModels = Array.from(document.querySelectorAll('input[name="model"]:checked')).map(cb => cb.value);
+        const confThreshold = parseFloat(confSlider?.value || 0.5);
+        const iouThreshold = parseFloat(iouSlider?.value || 0.45);
+
+        if (!selectedModels.length) {
+            alert("请至少选择一个模型");
+            return;
+        }
+
+        compareBtn.disabled = true;
+        compareBtn.textContent = "对比中...";
+
+        try {
+            const data = await fetchModelMetrics(selectedModels, confThreshold, iouThreshold);
+            const metrics = data.metrics || [];
+            renderCompareTable(metrics);
+            renderPRChart(metrics);
+        } catch (error) {
+            console.error("模型对比失败:", error);
+            alert("模型对比失败，请重试");
+        } finally {
+            compareBtn.disabled = false;
+            compareBtn.textContent = "开始对比";
+        }
     });
 }
 
