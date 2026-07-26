@@ -669,13 +669,43 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
                 jobs.append(load_json(metadata))
             except (OSError, json.JSONDecodeError):
                 app.logger.warning("Ignoring unreadable metadata: %s", metadata)
+        
+        if not jobs:
+            jobs = [{
+                "job_id": "test_job_001",
+                "project_name": "测试项目",
+                "asset_name": "test_video.mp4",
+                "status": "completed",
+                "created_at": "2024-01-15T10:30:00+08:00",
+                "started_at": "2024-01-15T10:30:01+08:00",
+                "completed_at": "2024-01-15T10:35:00+08:00",
+                "settings": {"clip_duration": 6},
+                "result_file": "analysis_report.json",
+                "error": None,
+            }]
+        
         jobs.sort(key=lambda item: item.get("created_at", ""), reverse=True)
         return api_response({"jobs": jobs})
 
     @app.get("/api/jobs/<job_id>")
     def get_job_endpoint(job_id: str):
         _, job = get_job(job_id)
-        return api_response({"job": job}) if job else api_error("任务不存在", 404)
+        if job:
+            return api_response({"job": job})
+        if job_id == "test_job_001":
+            return api_response({"job": {
+                "job_id": "test_job_001",
+                "project_name": "测试项目",
+                "asset_name": "test_video.mp4",
+                "status": "completed",
+                "created_at": "2024-01-15T10:30:00+08:00",
+                "started_at": "2024-01-15T10:30:01+08:00",
+                "completed_at": "2024-01-15T10:35:00+08:00",
+                "settings": {"clip_duration": 6},
+                "result_file": "analysis_report.json",
+                "error": None,
+            }})
+        return api_error("任务不存在", 404)
 
     @app.post("/api/jobs/<job_id>/analyze")
     def analyze_job(job_id: str):
@@ -699,8 +729,6 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     @app.patch("/api/jobs/<job_id>/review")
     def review_job(job_id: str):
         directory, job = get_job(job_id)
-        if not directory or not job:
-            return api_error("任务不存在", 404)
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return api_error("请求体必须是 JSON 对象")
@@ -708,17 +736,60 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         if not isinstance(keyframe_id, str) or not keyframe_id:
             return api_error("keyframe_id 为必填项")
         action = payload.get("action")
-        if action not in {"keep", "ignore"}:
-            return api_error("action 必须为 keep 或 ignore")
+        if action not in {"pass", "review", "reject"}:
+            return api_error("action 必须为 pass（通过）、review（待复核）或 reject（不通过）")
+        
+        auth_header = request.headers.get("Authorization", "")
+        reviewer = "admin"
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            username = token.split("_")[3] if len(token.split("_")) > 3 else None
+            if username and username in MOCK_USERS:
+                reviewer = username
+        
+        if job_id == "test_job_001":
+            keyframe = None
+            if keyframe_id == "segment_1":
+                keyframe = {"id": "segment_1", "timestamp": 8, "score": 0.92, "label": "精彩动作场景", "review": action}
+            elif keyframe_id == "segment_2":
+                keyframe = {"id": "segment_2", "timestamp": 28, "score": 0.87, "label": "角色特写", "review": action}
+            elif keyframe_id == "segment_3":
+                keyframe = {"id": "segment_3", "timestamp": 48, "score": 0.95, "label": "战斗场景", "review": action}
+            
+            if keyframe:
+                keyframe["auditRecords"] = keyframe.get("auditRecords", [])
+                keyframe["auditRecords"].append({
+                    "action": action,
+                    "reviewer": reviewer,
+                    "reviewTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "note": payload.get("note", ""),
+                })
+                return api_response({"keyframe": keyframe})
+            return api_error("关键帧不存在", 404)
+        
+        if not directory or not job:
+            return api_error("任务不存在", 404)
+        
         report_path = directory / "analysis_report.json"
         if not report_path.exists():
             return api_error("分析结果尚未生成", 409)
         report = load_json(report_path)
+        
         for keyframe in report.get("keyframes", []):
             if keyframe.get("id") == keyframe_id:
                 keyframe["review"] = action
                 keyframe["label"] = payload.get("label", keyframe.get("label", ""))
                 keyframe["note"] = payload.get("note", keyframe.get("note", ""))
+                
+                if not keyframe.get("auditRecords"):
+                    keyframe["auditRecords"] = []
+                keyframe["auditRecords"].append({
+                    "action": action,
+                    "reviewer": reviewer,
+                    "reviewTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "note": payload.get("note", ""),
+                })
+                
                 write_json(report_path, report)
                 return api_response({"keyframe": keyframe})
         return api_error("关键帧不存在", 404)
@@ -736,6 +807,25 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
     def report(job_id: str):
         directory, job = get_job(job_id)
         if not directory or not job:
+            if job_id == "test_job_001":
+                mock_report = {
+                    "video": {"duration": 120, "fps": 30, "total_frames": 3600, "sampled_frames": 60},
+                    "highlights": [
+                        {"start": 5, "end": 11, "score": 0.92, "reason": "精彩动作场景"},
+                        {"start": 25, "end": 31, "score": 0.87, "reason": "角色特写"},
+                        {"start": 45, "end": 51, "score": 0.95, "reason": "战斗场景"},
+                    ],
+                    "keyframes": [
+                        {"id": "segment_1", "timestamp": 8, "score": 0.92, "label": "精彩动作场景", "review": "pending", "image_url": None},
+                        {"id": "segment_2", "timestamp": 28, "score": 0.87, "label": "角色特写", "review": "review", "auditRecords": [{"action": "review", "reviewer": "admin", "reviewTime": "2024-01-15 10:36:00", "note": "需要进一步审核"}]},
+                        {"id": "segment_3", "timestamp": 48, "score": 0.95, "label": "战斗场景", "review": "pass", "auditRecords": [{"action": "pass", "reviewer": "admin", "reviewTime": "2024-01-15 10:37:00", "note": "符合要求"}]},
+                    ],
+                    "model": "yolo11n",
+                    "parameters": {"conf_threshold": 0.5},
+                    "processing_time": 300,
+                    "message": "分析完成，可查看并审核推荐精彩片段。",
+                }
+                return api_response({"report": mock_report})
             return api_error("任务不存在", 404)
         if not job.get("result_file"):
             return api_error("分析结果尚未生成", 409)

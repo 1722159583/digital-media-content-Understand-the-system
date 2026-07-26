@@ -71,9 +71,10 @@ async function refreshTokenIfNeeded() {
             body: JSON.stringify({ refresh_token: refreshToken }),
         });
         const data = await response.json();
-        if (data.code === 200 && data.data?.access_token) {
-            setAccessToken(data.data.access_token);
-            return data.data.access_token;
+        const responseData = getResponseData(data);
+        if (data.code === 200 && responseData.access_token) {
+            setAccessToken(responseData.access_token);
+            return responseData.access_token;
         }
         throw new Error(data.msg || "刷新Token失败");
     } catch {
@@ -206,13 +207,14 @@ async function handleLogin() {
                 body: JSON.stringify({ username, password }),
             });
             
-            if (data.data?.access_token) {
-                setAccessToken(data.data.access_token);
-                if (data.data.refresh_token) {
-                    setRefreshToken(data.data.refresh_token);
+            const responseData = getResponseData(data);
+            if (responseData.access_token) {
+                setAccessToken(responseData.access_token);
+                if (responseData.refresh_token) {
+                    setRefreshToken(responseData.refresh_token);
                 }
-                if (data.data.user) {
-                    setUserInfo(data.data.user);
+                if (responseData.user) {
+                    setUserInfo(responseData.user);
                 }
                 
                 window.location.href = "/";
@@ -283,7 +285,8 @@ async function handleRegister() {
                 body: JSON.stringify({ username, password, email, role }),
             });
             
-            if (data.data?.userId) {
+            const responseData = getResponseData(data);
+            if (responseData.userId) {
                 alert("注册成功，请登录");
                 window.location.href = "/login";
             }
@@ -397,7 +400,8 @@ async function renderJobList() {
     
     try {
         const data = await fetchJSON(`${API_BASE}/jobs`);
-        const jobs = data.data?.jobs || [];
+        const responseData = getResponseData(data);
+        const jobs = responseData.jobs || [];
         
         if (!jobs.length) {
             jobList.innerHTML = '<p class="loading-text">暂无任务，上传一个视频开始吧</p>';
@@ -437,19 +441,46 @@ function renderHighlights(report, jobId) {
     if (!keyframes.length) return '<p class="loading-text">本次分析未筛选出高光片段。</p>';
     
     return `<h3>推荐精彩片段</h3><div class="keyframes-grid" data-job-id="${escapeHtml(jobId)}">
-        ${keyframes.map((frame) => `
+        ${keyframes.map((frame) => {
+            const reviewStatus = frame.review || "pending";
+            const statusText = reviewStatus === "pass" ? "通过" : reviewStatus === "review" ? "待复核" : reviewStatus === "reject" ? "不通过" : "待审核";
+            const statusClass = reviewStatus === "pass" ? "status-pass" : reviewStatus === "review" ? "status-review" : reviewStatus === "reject" ? "status-reject" : "status-pending";
+            
+            const auditRecords = frame.auditRecords || [];
+            const recordsHtml = auditRecords.length > 0 ? `
+                <div class="audit-records">
+                    <h4>审核记录</h4>
+                    <ul>
+                        ${auditRecords.map(rec => `
+                            <li>
+                                <span class="${rec.action === 'pass' ? 'action-pass' : rec.action === 'review' ? 'action-review' : 'action-reject'}">
+                                    ${rec.action === 'pass' ? '通过' : rec.action === 'review' ? '待复核' : '不通过'}
+                                </span>
+                                <span class="reviewer">${escapeHtml(rec.reviewer)}</span>
+                                <span class="review-time">${escapeHtml(rec.reviewTime)}</span>
+                                ${rec.note ? `<span class="review-note">${escapeHtml(rec.note)}</span>` : ''}
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            ` : '';
+            
+            return `
             <article class="keyframe-card" data-keyframe-id="${escapeHtml(frame.id)}">
                 ${frame.image_url ? `<img src="${escapeHtml(frame.image_url)}" alt="片段证据帧" loading="lazy">` : ""}
                 <div class="score">评分 ${Number(frame.score || 0).toFixed(3)}</div>
                 <div class="time">${frame.timestamp ?? 0} 秒</div>
                 <p>${escapeHtml(frame.label || "画面变化")}</p>
+                <div class="review-status ${statusClass}">${statusText}</div>
                 <div class="actions">
-                    <button class="kept" type="button" data-action="keep">保留</button>
-                    <button class="ignored" type="button" data-action="ignore">忽略</button>
+                    <button class="btn-pass ${reviewStatus === 'pass' ? 'active' : ''}" type="button" data-action="pass">✓ 通过</button>
+                    <button class="btn-review ${reviewStatus === 'review' ? 'active' : ''}" type="button" data-action="review">○ 待复核</button>
+                    <button class="btn-reject ${reviewStatus === 'reject' ? 'active' : ''}" type="button" data-action="reject">✗ 不通过</button>
                 </div>
-                <small>审核：${escapeHtml(frame.review || "pending")}</small>
+                ${recordsHtml}
             </article>
-        `).join("")}
+            `;
+        }).join("")}
     </div>`;
 }
 
@@ -467,7 +498,7 @@ async function renderJobDetail(jobId) {
     
     try {
         const jobData = await fetchJSON(`${API_BASE}/jobs/${jobId}`);
-        const job = jobData.data?.job;
+        const job = jobData.job;
         
         let html = `<div class="job-summary">
             <div><strong>任务 ID</strong><br>${escapeHtml(job.job_id)}</div>
@@ -482,11 +513,22 @@ async function renderJobDetail(jobId) {
             html += `<p class="error-text">分析失败：${escapeHtml(job.error || "未知错误")}</p>`;
         } else if (job.status === "completed" && job.result_file) {
             const reportData = await fetchJSON(`${API_BASE}/jobs/${jobId}/report`);
-            const report = reportData.data?.report;
+            const report = reportData.report;
             
+            html += `<div class="export-section">
+                <h3>📥 报告导出</h3>
+                <div class="export-buttons">
+                    <button class="btn-export btn-json" data-job-id="${escapeHtml(jobId)}" data-export-type="json">📄 JSON报告</button>
+                    <button class="btn-export btn-html" data-job-id="${escapeHtml(jobId)}" data-export-type="html">🌐 HTML报告</button>
+                    <button class="btn-export btn-pdf" data-job-id="${escapeHtml(jobId)}" data-export-type="pdf">📕 PDF报告</button>
+                    <button class="btn-export btn-zip" data-job-id="${escapeHtml(jobId)}" data-export-type="zip">📦 审核包</button>
+                </div>
+            </div>`;
             html += `<h3>分析概览</h3>${renderVideoInfo(report.video || {})}`;
             html += `<p class="loading-text">${escapeHtml(report.message || "分析完成")}</p>`;
             html += renderHighlights(report, jobId);
+            
+            window.currentReportData = { job, report };
         } else {
             html += `<p class="loading-text">${statusLabel(job.status)}，页面会自动刷新。</p>`;
             detailTimer = setTimeout(() => renderJobDetail(jobId), 1500);
@@ -494,6 +536,7 @@ async function renderJobDetail(jobId) {
         
         detailContent.innerHTML = html;
         bindReviewButtons(jobId);
+        bindExportButtons(jobId);
     } catch (error) {
         detailContent.innerHTML = `<p class="error-text">加载详情失败：${escapeHtml(error.message)}</p>`;
     }
@@ -518,6 +561,203 @@ function bindReviewButtons(jobId) {
             }
         });
     });
+}
+
+function bindExportButtons(jobId) {
+    document.querySelectorAll(".btn-export").forEach((button) => {
+        button.addEventListener("click", () => {
+            const exportType = button.dataset.exportType;
+            const data = window.currentReportData;
+            if (!data) {
+                alert("暂无数据可导出");
+                return;
+            }
+            
+            switch (exportType) {
+                case "json":
+                    exportJSON(data, jobId);
+                    break;
+                case "html":
+                    exportHTML(data, jobId);
+                    break;
+                case "pdf":
+                    exportPDF(jobId);
+                    break;
+                case "zip":
+                    exportZIP(jobId);
+                    break;
+            }
+        });
+    });
+}
+
+function exportJSON(data, jobId) {
+    const exportData = {
+        job: data.job,
+        report: data.report,
+        exportTime: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    downloadFile(blob, `${jobId}_analysis_report.json`);
+}
+
+function exportHTML(data, jobId) {
+    const { job, report } = data;
+    const video = report.video || {};
+    const keyframes = report.keyframes || [];
+    const highlights = report.highlights || [];
+    
+    const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分析报告 - ${job.project_name}</title>
+    <style>
+        body { font-family: 'Microsoft YaHei', sans-serif; margin: 40px; line-height: 1.6; }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; }
+        h3 { color: #7f8c8d; }
+        .summary { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; }
+        .summary div { display: inline-block; width: 24%; margin: 5px 0; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; }
+        .status-pass { background: #27ae60; color: white; padding: 3px 10px; border-radius: 4px; font-size: 12px; }
+        .status-review { background: #f39c12; color: white; padding: 3px 10px; border-radius: 4px; font-size: 12px; }
+        .status-reject { background: #e74c3c; color: white; padding: 3px 10px; border-radius: 4px; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background: #3498db; color: white; }
+        .audit-record { font-size: 12px; color: #666; margin-top: 8px; padding-top: 8px; border-top: 1px dashed #ddd; }
+    </style>
+</head>
+<body>
+    <h1>🎬 智能数字媒体内容理解系统 - 分析报告</h1>
+    
+    <div class="summary">
+        <div><strong>任务ID:</strong> ${escapeHtml(job.job_id)}</div>
+        <div><strong>项目名称:</strong> ${escapeHtml(job.project_name || "-")}</div>
+        <div><strong>素材名称:</strong> ${escapeHtml(job.asset_name || "-")}</div>
+        <div><strong>分析状态:</strong> ${escapeHtml(job.status)}</div>
+        <div><strong>创建时间:</strong> ${escapeHtml(job.created_at || "-")}</div>
+        <div><strong>完成时间:</strong> ${escapeHtml(job.completed_at || "-")}</div>
+    </div>
+    
+    <h2>📊 视频概览</h2>
+    <div class="grid">
+        <div class="card"><strong>视频时长:</strong> ${video.duration || 0} 秒</div>
+        <div class="card"><strong>帧率:</strong> ${video.fps || 0} FPS</div>
+        <div class="card"><strong>总帧数:</strong> ${video.total_frames || 0}</div>
+        <div class="card"><strong>采样帧数:</strong> ${video.sampled_frames || 0}</div>
+    </div>
+    
+    <h2>✨ 精彩片段推荐</h2>
+    ${highlights.length ? `
+    <table>
+        <tr><th>开始时间</th><th>结束时间</th><th>评分</th><th>推荐理由</th></tr>
+        ${highlights.map(h => `
+            <tr>
+                <td>${h.start} 秒</td>
+                <td>${h.end} 秒</td>
+                <td>${Number(h.score || 0).toFixed(3)}</td>
+                <td>${escapeHtml(h.reason || "-")}</td>
+            </tr>
+        `).join('')}
+    </table>
+    ` : '<p>暂无精彩片段推荐</p>'}
+    
+    <h2>🎯 关键帧分析</h2>
+    <div class="grid">
+        ${keyframes.map(frame => {
+            const reviewStatus = frame.review || "pending";
+            const statusText = reviewStatus === "pass" ? "通过" : reviewStatus === "review" ? "待复核" : reviewStatus === "reject" ? "不通过" : "待审核";
+            const statusClass = reviewStatus === "pass" ? "status-pass" : reviewStatus === "review" ? "status-review" : "status-reject";
+            
+            const auditRecords = frame.auditRecords || [];
+            const recordsHtml = auditRecords.length > 0 ? `
+                <div class="audit-record">
+                    <strong>审核记录:</strong>
+                    ${auditRecords.map(rec => `
+                        <div>${rec.reviewTime} - ${rec.action === 'pass' ? '通过' : rec.action === 'review' ? '待复核' : '不通过'} (${escapeHtml(rec.reviewer)})${rec.note ? ` - ${escapeHtml(rec.note)}` : ''}</div>
+                    `).join('')}
+                </div>
+            ` : '';
+            
+            return `
+            <div class="card">
+                <h3>${escapeHtml(frame.label || "画面变化")}</h3>
+                <p><strong>时间:</strong> ${frame.timestamp || 0} 秒</p>
+                <p><strong>评分:</strong> ${Number(frame.score || 0).toFixed(3)}</p>
+                <p><strong>审核状态:</strong> <span class="${statusClass}">${statusText}</span></p>
+                ${recordsHtml}
+            </div>
+            `;
+        }).join('')}
+    </div>
+    
+    <h2>📝 分析备注</h2>
+    <p>${escapeHtml(report.message || "分析完成")}</p>
+    
+    <p style="color: #999; font-size: 12px; margin-top: 50px;">报告导出时间: ${new Date().toLocaleString('zh-CN')}</p>
+</body>
+</html>`;
+    
+    const blob = new Blob([html], { type: "text/html" });
+    downloadFile(blob, `${jobId}_analysis_report.html`);
+}
+
+function exportPDF(jobId) {
+    const accessToken = getAccessToken();
+    const url = `${API_BASE}/export/report`;
+    const headers = { "Content-Type": "application/json" };
+    if (accessToken) {
+        headers["Authorization"] = `Bearer ${accessToken}`;
+    }
+    
+    fetch(url, {
+        method: "POST",
+        headers: headers,
+        body: JSON.stringify({ agentSessionId: `agent_${jobId}`, format: "pdf" }),
+    }).then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        return response.blob();
+    }).then(blob => {
+        downloadFile(blob, `${jobId}_analysis_report.pdf`);
+    }).catch(error => {
+        alert(`PDF导出失败：${error.message}\n该功能需要后端支持`);
+    });
+}
+
+function exportZIP(jobId) {
+    const accessToken = getAccessToken();
+    const url = `${API_BASE}/export/task/${jobId}/zip`;
+    
+    fetch(url, {
+        method: "GET",
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    }).then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        return response.blob();
+    }).then(blob => {
+        downloadFile(blob, `${jobId}_audit_package.zip`);
+    }).catch(error => {
+        alert(`审核包下载失败：${error.message}\n该功能需要后端支持`);
+    });
+}
+
+function downloadFile(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 function initMainApp() {
@@ -589,7 +829,8 @@ async function initKBManage() {
     async function loadKBList() {
         try {
             const data = await fetchJSON(`${API_BASE}/kb/list`);
-            const kbs = data.data?.list || [];
+            const responseData = getResponseData(data);
+            const kbs = responseData.list || [];
             
             if (!kbs.length) {
                 kbList.innerHTML = '<p class="loading-text">暂无知识库，点击上方按钮创建</p>';
@@ -641,7 +882,8 @@ async function initKBManage() {
     async function renderKBDetail(kbId) {
         try {
             const data = await fetchJSON(`${API_BASE}/kb/${kbId}/doc/list`);
-            const docs = data.data?.list || [];
+            const responseData = getResponseData(data);
+            const docs = responseData.list || [];
             
             let html = `
                 <div class="kb-detail-info">
@@ -791,7 +1033,8 @@ async function initKBSearch() {
     async function loadKBsForSelect() {
         try {
             const data = await fetchJSON(`${API_BASE}/kb/list`);
-            const kbs = data.data?.list || [];
+            const responseData = getResponseData(data);
+            const kbs = responseData.list || [];
             kbs.forEach((kb) => {
                 const option = document.createElement("option");
                 option.value = kb.kbId;
@@ -820,7 +1063,8 @@ async function initKBSearch() {
                 body: JSON.stringify({ kb_id: kbId, query_text: query, top_k: topK, score_threshold: threshold }),
             });
 
-            const results = data.data?.results || [];
+            const responseData = getResponseData(data);
+            const results = responseData.results || [];
             resultsCount.textContent = `共 ${results.length} 条结果`;
 
             if (!results.length) {
@@ -869,7 +1113,8 @@ async function initAgentAnalysis() {
     async function loadTasksForSelect() {
         try {
             const data = await fetchJSON(`${API_BASE}/jobs`);
-            const jobs = data.data?.jobs || data.jobs || [];
+            const responseData = getResponseData(data);
+            const jobs = responseData.jobs || [];
             const completedJobs = jobs.filter((j) => j.status === "completed");
             completedJobs.forEach((job) => {
                 const option = document.createElement("option");
@@ -883,7 +1128,8 @@ async function initAgentAnalysis() {
     async function loadKBsForSelect() {
         try {
             const data = await fetchJSON(`${API_BASE}/kb/list`);
-            const kbs = data.data?.list || [];
+            const responseData = getResponseData(data);
+            const kbs = responseData.list || [];
             kbs.forEach((kb) => {
                 const option = document.createElement("option");
                 option.value = kb.kbId;
@@ -896,7 +1142,8 @@ async function initAgentAnalysis() {
     async function loadAgentSessions() {
         try {
             const data = await fetchJSON(`${API_BASE}/agent/session/list`);
-            const sessions = data.data?.list || [];
+            const responseData = getResponseData(data);
+            const sessions = responseData.list || [];
 
             if (!sessions.length) {
                 agentSessions.innerHTML = '<p class="loading-text">暂无分析会话</p>';
@@ -1227,7 +1474,8 @@ async function loadTasksForVideoSelect() {
 
     try {
         const data = await fetchJSON(`${API_BASE}/detect/task/list?page=1&size=20`);
-        const tasks = data.data?.list || [];
+        const responseData = getResponseData(data);
+        const tasks = responseData.list || [];
         tasks.forEach(task => {
             const option = document.createElement("option");
             option.value = task.taskId;
