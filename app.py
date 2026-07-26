@@ -283,6 +283,253 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             "traceId": ""
         })
 
+    MOCK_KNOWLEDGE_BASES = [
+        {
+            "kbId": "kb_001",
+            "name": "媒体审核规范",
+            "category": "media_spec",
+            "description": "包含数字媒体内容审核的标准和规范",
+            "docCount": 5,
+            "createdAt": "2024-01-15 10:00:00",
+        },
+        {
+            "kbId": "kb_002",
+            "name": "游戏素材规则",
+            "category": "game_rules",
+            "description": "游戏素材分类和使用规则",
+            "docCount": 8,
+            "createdAt": "2024-01-16 14:30:00",
+        },
+        {
+            "kbId": "kb_003",
+            "name": "角色设定库",
+            "category": "role_setting",
+            "description": "游戏角色设定和特征描述",
+            "docCount": 12,
+            "createdAt": "2024-01-17 09:00:00",
+        },
+    ]
+
+    MOCK_DOCUMENTS = {
+        "kb_001": [
+            {"docId": "doc_001", "name": "内容审核标准v1.md", "chunkCount": 25, "vectorStatus": "indexed"},
+            {"docId": "doc_002", "name": "敏感内容识别规则.txt", "chunkCount": 18, "vectorStatus": "indexed"},
+            {"docId": "doc_003", "name": "版权规范说明.pdf", "chunkCount": 32, "vectorStatus": "indexed"},
+        ],
+        "kb_002": [
+            {"docId": "doc_004", "name": "素材分类标准.md", "chunkCount": 40, "vectorStatus": "indexed"},
+            {"docId": "doc_005", "name": "素材使用规范.txt", "chunkCount": 22, "vectorStatus": "indexed"},
+        ],
+        "kb_003": [
+            {"docId": "doc_006", "name": "主角设定.md", "chunkCount": 50, "vectorStatus": "indexed"},
+            {"docId": "doc_007", "name": "NPC设定集.pdf", "chunkCount": 35, "vectorStatus": "indexed"},
+        ],
+    }
+
+    MOCK_AGENT_SESSIONS = [
+        {
+            "sessionId": "agent_001",
+            "detectTaskId": "20240115_100000_abc123",
+            "kbId": "kb_001",
+            "status": "completed",
+            "summary": "视频内容符合审核规范，主要包含游戏角色和场景画面，无敏感内容。",
+            "tags": ["游戏视频", "角色识别", "安全审核通过"],
+            "suggestion": "建议通过审核，可作为正常素材使用。",
+            "createdAt": "2024-01-18 10:30:00",
+        },
+        {
+            "sessionId": "agent_002",
+            "detectTaskId": "20240118_140000_def456",
+            "kbId": "kb_002",
+            "status": "completed",
+            "summary": "素材包含多种游戏道具和角色，符合素材分类规则。",
+            "tags": ["素材分析", "道具识别", "分类完成"],
+            "suggestion": "素材分类准确，可用于游戏资源管理系统。",
+            "createdAt": "2024-01-19 15:45:00",
+        },
+    ]
+
+    @app.get("/api/kb/list")
+    def kb_list():
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {"list": MOCK_KNOWLEDGE_BASES, "total": len(MOCK_KNOWLEDGE_BASES)},
+            "traceId": ""
+        })
+
+    @app.post("/api/kb/create")
+    def kb_create():
+        payload = request.get_json(silent=True) or {}
+        name = payload.get("name")
+        category = payload.get("category", "other")
+        description = payload.get("description", "")
+        
+        if not name:
+            return jsonify({"code": 400, "msg": "请输入知识库名称", "data": {}, "traceId": ""})
+        
+        kb_id = f"kb_{len(MOCK_KNOWLEDGE_BASES) + 1:03d}"
+        new_kb = {
+            "kbId": kb_id,
+            "name": name,
+            "category": category,
+            "description": description,
+            "docCount": 0,
+            "createdAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        MOCK_KNOWLEDGE_BASES.append(new_kb)
+        MOCK_DOCUMENTS[kb_id] = []
+        
+        return jsonify({
+            "code": 200,
+            "msg": "创建成功",
+            "data": {"kbId": kb_id, "name": name},
+            "traceId": ""
+        })
+
+    @app.delete("/api/kb/<kb_id>")
+    def kb_delete(kb_id):
+        global MOCK_KNOWLEDGE_BASES
+        MOCK_KNOWLEDGE_BASES = [kb for kb in MOCK_KNOWLEDGE_BASES if kb["kbId"] != kb_id]
+        MOCK_DOCUMENTS.pop(kb_id, None)
+        return jsonify({"code": 200, "msg": "删除成功", "data": {}, "traceId": ""})
+
+    @app.get("/api/kb/<kb_id>/doc/list")
+    def kb_doc_list(kb_id):
+        docs = MOCK_DOCUMENTS.get(kb_id, [])
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {"list": docs, "total": len(docs)},
+            "traceId": ""
+        })
+
+    @app.post("/api/kb/<kb_id>/doc/upload")
+    def kb_doc_upload(kb_id):
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"code": 400, "msg": "请选择文件", "data": {}, "traceId": ""})
+        
+        if kb_id not in MOCK_DOCUMENTS:
+            MOCK_DOCUMENTS[kb_id] = []
+        
+        doc_id = f"doc_{len(MOCK_DOCUMENTS[kb_id]) + 1:03d}"
+        MOCK_DOCUMENTS[kb_id].append({
+            "docId": doc_id,
+            "name": file.filename,
+            "chunkCount": 10 + len(MOCK_DOCUMENTS[kb_id]),
+            "vectorStatus": "indexed",
+        })
+        
+        for kb in MOCK_KNOWLEDGE_BASES:
+            if kb["kbId"] == kb_id:
+                kb["docCount"] += 1
+                break
+        
+        return jsonify({
+            "code": 200,
+            "msg": "上传成功",
+            "data": {"docId": doc_id, "chunkCount": 10},
+            "traceId": ""
+        })
+
+    @app.delete("/api/kb/<kb_id>/doc/<doc_id>")
+    def kb_doc_delete(kb_id, doc_id):
+        if kb_id in MOCK_DOCUMENTS:
+            MOCK_DOCUMENTS[kb_id] = [doc for doc in MOCK_DOCUMENTS[kb_id] if doc["docId"] != doc_id]
+            for kb in MOCK_KNOWLEDGE_BASES:
+                if kb["kbId"] == kb_id:
+                    kb["docCount"] = len(MOCK_DOCUMENTS[kb_id])
+                    break
+        return jsonify({"code": 200, "msg": "删除成功", "data": {}, "traceId": ""})
+
+    @app.post("/api/kb/retrieve")
+    def kb_retrieve():
+        payload = request.get_json(silent=True) or {}
+        query_text = payload.get("query_text", "")
+        kb_id = payload.get("kb_id")
+        top_k = payload.get("top_k", 10)
+        
+        mock_results = [
+            {
+                "text": f"根据查询 '{query_text}'，知识库中找到相关规范。数字媒体内容审核需要关注敏感信息识别、版权合规等方面。",
+                "score": round(0.85 - i * 0.05, 4),
+                "documentSource": "内容审核标准v1.md",
+            }
+            for i in range(min(top_k, 5))
+        ]
+        
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {"results": mock_results},
+            "traceId": ""
+        })
+
+    @app.post("/api/agent/run")
+    def agent_run():
+        payload = request.get_json(silent=True) or {}
+        detect_task_id = payload.get("detect_task_id")
+        kb_id = payload.get("kb_id")
+        
+        mock_result = {
+            "sessionId": f"agent_{len(MOCK_AGENT_SESSIONS) + 1:03d}",
+            "summary": "视频内容分析完成。检测到多种游戏角色和道具，画面质量良好，运动强度适中。",
+            "tags": ["游戏视频", "角色识别", "道具检测", "精彩片段"],
+            "suggestion": "建议通过审核，可作为游戏宣传素材使用。画面中包含丰富的游戏元素，适合用于游戏内容创作。",
+        }
+        
+        MOCK_AGENT_SESSIONS.append({
+            "sessionId": mock_result["sessionId"],
+            "detectTaskId": detect_task_id,
+            "kbId": kb_id,
+            "status": "completed",
+            "summary": mock_result["summary"],
+            "tags": mock_result["tags"],
+            "suggestion": mock_result["suggestion"],
+            "createdAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
+        
+        return jsonify({
+            "code": 200,
+            "msg": "分析完成",
+            "data": mock_result,
+            "traceId": ""
+        })
+
+    @app.get("/api/agent/session/list")
+    def agent_session_list():
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": {"list": MOCK_AGENT_SESSIONS, "total": len(MOCK_AGENT_SESSIONS)},
+            "traceId": ""
+        })
+
+    @app.get("/api/agent/session/<session_id>")
+    def agent_session_detail(session_id):
+        session = next((s for s in MOCK_AGENT_SESSIONS if s["sessionId"] == session_id), None)
+        if not session:
+            return jsonify({"code": 404, "msg": "会话不存在", "data": {}, "traceId": ""})
+        return jsonify({
+            "code": 200,
+            "msg": "success",
+            "data": session,
+            "traceId": ""
+        })
+
+    @app.get("/kb/manage")
+    def kb_manage():
+        return render_template("kb_manage.html")
+
+    @app.get("/kb/search")
+    def kb_search():
+        return render_template("kb_search.html")
+
+    @app.get("/agent/analysis")
+    def agent_analysis():
+        return render_template("agent_analysis.html")
+
     @app.post("/api/jobs")
     def create_job():
         upload = request.files.get("file")

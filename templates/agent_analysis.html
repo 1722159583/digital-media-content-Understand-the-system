@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent分析 - 智能数字媒体内容理解系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
+</head>
+<body>
+    <div id="auth-loading">
+        <div class="loading-spinner"></div>
+        <p>加载中...</p>
+    </div>
+
+    <div id="main-app" style="display: none;">
+        <header>
+            <div class="header-left">
+                <h1>🎬 智能数字媒体内容理解系统</h1>
+                <span>基于 YOLO + Agent 的智能分析平台</span>
+            </div>
+            <div class="header-right">
+                <div id="user-info" class="user-info">
+                    <span class="username">用户</span>
+                    <span class="role">普通用户</span>
+                    <button id="logout-btn" class="btn-logout">退出登录</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="main-nav">
+            <a href="/" class="nav-item">📊 任务管理</a>
+            <a href="/kb/manage" class="nav-item">📚 知识库管理</a>
+            <a href="/kb/search" class="nav-item">🔍 知识库检索</a>
+            <a href="/agent/analysis" class="nav-item active">🤖 Agent分析</a>
+        </nav>
+
+        <main>
+            <section class="agent-section">
+                <div class="section-header">
+                    <h2>🤖 Agent智能分析</h2>
+                    <button id="run-agent-btn" class="btn-primary">启动分析</button>
+                </div>
+
+                <div class="agent-form">
+                    <div class="form-group">
+                        <label>检测任务</label>
+                        <select id="agent-detect-task-id">
+                            <option value="">选择检测任务</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>知识库</label>
+                        <select id="agent-kb-id">
+                            <option value="">选择知识库</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>工作流模式</label>
+                        <select id="agent-workflow-mode">
+                            <option value="standard">标准模式</option>
+                            <option value="fast">快速模式</option>
+                            <option value="deep">深度分析</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="agent-output" class="agent-output" style="display:none;">
+                    <div class="output-section">
+                        <h3>📝 内容摘要</h3>
+                        <div id="agent-summary" class="output-content"></div>
+                    </div>
+
+                    <div class="output-section">
+                        <h3>🏷️ 标签</h3>
+                        <div id="agent-tags" class="tags-container"></div>
+                    </div>
+
+                    <div class="output-section">
+                        <h3>📋 审核建议</h3>
+                        <div id="agent-suggestion" class="output-content"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="agent-sessions-section">
+                <h2>📋 Agent分析会话记录</h2>
+                <div id="agent-sessions" class="agent-sessions">
+                    <p class="loading-text">加载会话记录中...</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

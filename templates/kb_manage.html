@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>知识库管理 - 智能数字媒体内容理解系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
+</head>
+<body>
+    <div id="auth-loading">
+        <div class="loading-spinner"></div>
+        <p>加载中...</p>
+    </div>
+
+    <div id="main-app" style="display: none;">
+        <header>
+            <div class="header-left">
+                <h1>🎬 智能数字媒体内容理解系统</h1>
+                <span>基于 YOLO + Agent 的智能分析平台</span>
+            </div>
+            <div class="header-right">
+                <div id="user-info" class="user-info">
+                    <span class="username">用户</span>
+                    <span class="role">普通用户</span>
+                    <button id="logout-btn" class="btn-logout">退出登录</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="main-nav">
+            <a href="/" class="nav-item">📊 任务管理</a>
+            <a href="/kb/manage" class="nav-item active">📚 知识库管理</a>
+            <a href="/kb/search" class="nav-item">🔍 知识库检索</a>
+            <a href="/agent/analysis" class="nav-item">🤖 Agent分析</a>
+        </nav>
+
+        <main>
+            <section class="kb-section">
+                <div class="section-header">
+                    <h2>📚 知识库管理</h2>
+                    <button id="create-kb-btn" class="btn-primary">创建知识库</button>
+                </div>
+                
+                <div id="kb-list" class="kb-list">
+                    <p class="loading-text">加载知识库列表中...</p>
+                </div>
+            </section>
+
+            <section id="kb-detail-section" class="kb-detail-section" style="display:none;">
+                <div class="detail-header">
+                    <h2 id="kb-detail-title">知识库详情</h2>
+                    <button id="close-kb-detail">关闭</button>
+                </div>
+                <div id="kb-detail-content">
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="create-kb-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>创建知识库</h3>
+                <button class="modal-close">×</button>
+            </div>
+            <form id="create-kb-form">
+                <div class="form-group">
+                    <label>知识库名称</label>
+                    <input type="text" id="kb-name" required placeholder="请输入知识库名称" />
+                </div>
+                <div class="form-group">
+                    <label>分类</label>
+                    <select id="kb-category">
+                        <option value="media_spec">媒体审核规范</option>
+                        <option value="game_rules">游戏素材规则</option>
+                        <option value="role_setting">角色设定</option>
+                        <option value="material_class">素材分类规则</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="kb-description" rows="3" placeholder="请输入知识库描述"></textarea>
+                </div>
+                <button type="submit" class="btn-primary">创建</button>
+            </form>
+            <div id="create-kb-error" class="error-message" style="display: none;"></div>
+        </div>
+    </div>
+
+    <div id="upload-doc-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>上传文档</h3>
+                <button class="modal-close">×</button>
+            </div>
+            <form id="upload-doc-form">
+                <input type="hidden" id="upload-kb-id" />
+                <div class="form-group">
+                    <label>选择文档</label>
+                    <input type="file" id="doc-file" accept=".txt,.md,.pdf" required />
+                    <small>支持 txt、md、pdf 格式</small>
+                </div>
+                <button type="submit" class="btn-primary">上传</button>
+            </form>
+            <div id="upload-doc-error" class="error-message" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

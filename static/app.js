@@ -373,6 +373,16 @@ async function checkAuthAndInit() {
         }
         
         initMainApp();
+        
+        if (document.getElementById("kb-list")) {
+            await initKBManage();
+        }
+        if (document.getElementById("search-form")) {
+            await initKBSearch();
+        }
+        if (document.getElementById("run-agent-btn")) {
+            await initAgentAnalysis();
+        }
     } catch {
         window.location.href = "/login";
     }
@@ -561,6 +571,416 @@ function initMainApp() {
     
     renderJobList();
     setInterval(renderJobList, 5000);
+}
+
+async function initKBManage() {
+    const createKbBtn = document.getElementById("create-kb-btn");
+    const createKbModal = document.getElementById("create-kb-modal");
+    const createKbForm = document.getElementById("create-kb-form");
+    const uploadDocModal = document.getElementById("upload-doc-modal");
+    const uploadDocForm = document.getElementById("upload-doc-form");
+    const kbList = document.getElementById("kb-list");
+    const kbDetailSection = document.getElementById("kb-detail-section");
+    const closeKbDetailBtn = document.getElementById("close-kb-detail");
+
+    async function loadKBList() {
+        try {
+            const data = await fetchJSON(`${API_BASE}/kb/list`);
+            const kbs = data.data?.list || [];
+            
+            if (!kbs.length) {
+                kbList.innerHTML = '<p class="loading-text">暂无知识库，点击上方按钮创建</p>';
+                return;
+            }
+
+            kbList.innerHTML = kbs.map((kb) => `
+                <div class="kb-card" data-kb-id="${escapeHtml(kb.kbId)}">
+                    <div class="kb-info">
+                        <h3>${escapeHtml(kb.name)}</h3>
+                        <p>${escapeHtml(kb.description || "暂无描述")}</p>
+                        <div class="kb-meta">
+                            <span class="kb-category">${escapeHtml(kb.category || "其他")}</span>
+                            <span class="kb-doc-count">文档数: ${kb.docCount || 0}</span>
+                        </div>
+                    </div>
+                    <div class="kb-actions">
+                        <button class="btn-view" data-action="view">查看</button>
+                        <button class="btn-upload" data-action="upload">上传文档</button>
+                        <button class="btn-delete" data-action="delete">删除</button>
+                    </div>
+                </div>
+            `).join("");
+
+            document.querySelectorAll(".kb-card").forEach((card) => {
+                card.addEventListener("click", (e) => {
+                    const target = e.target.closest("button");
+                    if (target) {
+                        const action = target.dataset.action;
+                        const kbId = card.dataset.kbId;
+                        if (action === "view") {
+                            renderKBDetail(kbId);
+                        } else if (action === "upload") {
+                            document.getElementById("upload-kb-id").value = kbId;
+                            uploadDocModal.style.display = "block";
+                        } else if (action === "delete") {
+                            if (confirm("确定删除该知识库？")) {
+                                deleteKB(kbId);
+                            }
+                        }
+                    }
+                });
+            });
+        } catch (error) {
+            kbList.innerHTML = `<p class="error-text">加载失败: ${escapeHtml(error.message)}</p>`;
+        }
+    }
+
+    async function renderKBDetail(kbId) {
+        try {
+            const data = await fetchJSON(`${API_BASE}/kb/${kbId}/doc/list`);
+            const docs = data.data?.list || [];
+            
+            let html = `
+                <div class="kb-detail-info">
+                    <div><strong>知识库ID</strong><br>${escapeHtml(kbId)}</div>
+                    <div><strong>文档数</strong><br>${docs.length}</div>
+                </div>
+                <h3>文档列表</h3>
+            `;
+
+            if (!docs.length) {
+                html += '<p class="loading-text">暂无文档</p>';
+            } else {
+                html += `<div class="doc-list">${docs.map((doc) => `
+                    <div class="doc-item">
+                        <span class="doc-name">${escapeHtml(doc.name || doc.docId)}</span>
+                        <span class="doc-status">${doc.vectorStatus === "indexed" ? "已向量化" : "待索引"}</span>
+                        <span class="doc-chunks">分块数: ${doc.chunkCount || 0}</span>
+                        <button class="btn-delete-doc" data-doc-id="${escapeHtml(doc.docId)}">删除</button>
+                    </div>
+                `).join("")}</div>`;
+            }
+
+            document.getElementById("kb-detail-content").innerHTML = html;
+            kbDetailSection.style.display = "block";
+
+            document.querySelectorAll(".btn-delete-doc").forEach((btn) => {
+                btn.addEventListener("click", () => {
+                    deleteDoc(kbId, btn.dataset.docId);
+                });
+            });
+        } catch (error) {
+            document.getElementById("kb-detail-content").innerHTML = `<p class="error-text">加载失败: ${escapeHtml(error.message)}</p>`;
+        }
+    }
+
+    async function createKB() {
+        const name = document.getElementById("kb-name").value.trim();
+        const category = document.getElementById("kb-category").value;
+        const description = document.getElementById("kb-description").value.trim();
+
+        if (!name) {
+            showError("create-kb-error", "请输入知识库名称");
+            return;
+        }
+
+        try {
+            await fetchJSON(`${API_BASE}/kb/create`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name, category, description }),
+            });
+            createKbModal.style.display = "none";
+            createKbForm.reset();
+            await loadKBList();
+        } catch (error) {
+            showError("create-kb-error", error.message);
+        }
+    }
+
+    async function uploadDoc() {
+        const kbId = document.getElementById("upload-kb-id").value;
+        const fileInput = document.getElementById("doc-file");
+        
+        if (!kbId || !fileInput.files[0]) {
+            showError("upload-doc-error", "请选择文档");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+
+        try {
+            await fetchJSON(`${API_BASE}/kb/${kbId}/doc/upload`, {
+                method: "POST",
+                body: formData,
+            });
+            uploadDocModal.style.display = "none";
+            uploadDocForm.reset();
+            await loadKBList();
+            renderKBDetail(kbId);
+        } catch (error) {
+            showError("upload-doc-error", error.message);
+        }
+    }
+
+    async function deleteKB(kbId) {
+        try {
+            await fetchJSON(`${API_BASE}/kb/${kbId}`, { method: "DELETE" });
+            await loadKBList();
+        } catch (error) {
+            alert(`删除失败：${error.message}`);
+        }
+    }
+
+    async function deleteDoc(kbId, docId) {
+        try {
+            await fetchJSON(`${API_BASE}/kb/${kbId}/doc/${docId}`, { method: "DELETE" });
+            renderKBDetail(kbId);
+        } catch (error) {
+            alert(`删除失败：${error.message}`);
+        }
+    }
+
+    createKbBtn?.addEventListener("click", () => {
+        createKbModal.style.display = "block";
+    });
+
+    createKbForm?.addEventListener("submit", (e) => {
+        e.preventDefault();
+        createKB();
+    });
+
+    uploadDocForm?.addEventListener("submit", (e) => {
+        e.preventDefault();
+        uploadDoc();
+    });
+
+    closeKbDetailBtn?.addEventListener("click", () => {
+        kbDetailSection.style.display = "none";
+    });
+
+    document.querySelectorAll(".modal-close").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            btn.closest(".modal").style.display = "none";
+        });
+    });
+
+    window.addEventListener("click", (e) => {
+        if (e.target.classList.contains("modal")) {
+            e.target.style.display = "none";
+        }
+    });
+
+    await loadKBList();
+}
+
+async function initKBSearch() {
+    const searchForm = document.getElementById("search-form");
+    const searchQuery = document.getElementById("search-query");
+    const searchKbId = document.getElementById("search-kb-id");
+    const searchTopK = document.getElementById("search-top-k");
+    const searchThreshold = document.getElementById("search-threshold");
+    const thresholdValue = document.getElementById("threshold-value");
+    const searchResults = document.getElementById("search-results");
+    const resultsCount = document.getElementById("results-count");
+
+    async function loadKBsForSelect() {
+        try {
+            const data = await fetchJSON(`${API_BASE}/kb/list`);
+            const kbs = data.data?.list || [];
+            kbs.forEach((kb) => {
+                const option = document.createElement("option");
+                option.value = kb.kbId;
+                option.textContent = kb.name;
+                searchKbId.appendChild(option);
+            });
+        } catch {}
+    }
+
+    async function performSearch() {
+        const query = searchQuery.value.trim();
+        const kbId = searchKbId.value;
+        const topK = Number(searchTopK.value);
+        const threshold = Number(searchThreshold.value);
+
+        if (!query) {
+            return;
+        }
+
+        searchResults.innerHTML = '<p class="loading-text">检索中...</p>';
+
+        try {
+            const data = await fetchJSON(`${API_BASE}/kb/retrieve`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ kb_id: kbId, query_text: query, top_k: topK, score_threshold: threshold }),
+            });
+
+            const results = data.data?.results || [];
+            resultsCount.textContent = `共 ${results.length} 条结果`;
+
+            if (!results.length) {
+                searchResults.innerHTML = '<p class="loading-text">未找到匹配的结果</p>';
+                return;
+            }
+
+            searchResults.innerHTML = results.map((result, index) => `
+                <div class="search-result-item">
+                    <div class="result-rank">#${index + 1}</div>
+                    <div class="result-content">
+                        <div class="result-score">相似度: ${(result.score || 0).toFixed(4)}</div>
+                        <p>${escapeHtml(result.text || "")}</p>
+                        ${result.documentSource ? `<div class="result-source">来源: ${escapeHtml(result.documentSource)}</div>` : ""}
+                    </div>
+                </div>
+            `).join("");
+        } catch (error) {
+            searchResults.innerHTML = `<p class="error-text">检索失败: ${escapeHtml(error.message)}</p>`;
+        }
+    }
+
+    searchThreshold.addEventListener("input", () => {
+        thresholdValue.textContent = searchThreshold.value;
+    });
+
+    searchForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        performSearch();
+    });
+
+    await loadKBsForSelect();
+}
+
+async function initAgentAnalysis() {
+    const runAgentBtn = document.getElementById("run-agent-btn");
+    const agentDetectTaskId = document.getElementById("agent-detect-task-id");
+    const agentKbId = document.getElementById("agent-kb-id");
+    const agentWorkflowMode = document.getElementById("agent-workflow-mode");
+    const agentOutput = document.getElementById("agent-output");
+    const agentSummary = document.getElementById("agent-summary");
+    const agentTags = document.getElementById("agent-tags");
+    const agentSuggestion = document.getElementById("agent-suggestion");
+    const agentSessions = document.getElementById("agent-sessions");
+
+    async function loadTasksForSelect() {
+        try {
+            const data = await fetchJSON(`${API_BASE}/jobs`);
+            const jobs = data.data?.jobs || data.jobs || [];
+            const completedJobs = jobs.filter((j) => j.status === "completed");
+            completedJobs.forEach((job) => {
+                const option = document.createElement("option");
+                option.value = job.job_id;
+                option.textContent = `${job.project_name || job.job_id} (${job.asset_name || ""})`;
+                agentDetectTaskId.appendChild(option);
+            });
+        } catch {}
+    }
+
+    async function loadKBsForSelect() {
+        try {
+            const data = await fetchJSON(`${API_BASE}/kb/list`);
+            const kbs = data.data?.list || [];
+            kbs.forEach((kb) => {
+                const option = document.createElement("option");
+                option.value = kb.kbId;
+                option.textContent = kb.name;
+                agentKbId.appendChild(option);
+            });
+        } catch {}
+    }
+
+    async function loadAgentSessions() {
+        try {
+            const data = await fetchJSON(`${API_BASE}/agent/session/list`);
+            const sessions = data.data?.list || [];
+
+            if (!sessions.length) {
+                agentSessions.innerHTML = '<p class="loading-text">暂无分析会话</p>';
+                return;
+            }
+
+            agentSessions.innerHTML = sessions.map((session) => `
+                <div class="agent-session-item" data-session-id="${escapeHtml(session.sessionId)}">
+                    <div class="session-info">
+                        <span class="session-name">会话 ${escapeHtml(session.sessionId)}</span>
+                        <span class="session-status">${session.status}</span>
+                    </div>
+                    <div class="session-meta">
+                        <span>${escapeHtml(session.createdAt || "")}</span>
+                    </div>
+                    <button class="btn-view-session">查看详情</button>
+                </div>
+            `).join("");
+
+            document.querySelectorAll(".btn-view-session").forEach((btn) => {
+                btn.addEventListener("click", () => {
+                    const sessionId = btn.closest(".agent-session-item").dataset.sessionId;
+                    viewSessionDetail(sessionId);
+                });
+            });
+        } catch (error) {
+            agentSessions.innerHTML = `<p class="error-text">加载失败: ${escapeHtml(error.message)}</p>`;
+        }
+    }
+
+    async function runAgentAnalysis() {
+        const detectTaskId = agentDetectTaskId.value;
+        const kbId = agentKbId.value;
+        const workflowMode = agentWorkflowMode.value;
+
+        if (!detectTaskId) {
+            alert("请选择检测任务");
+            return;
+        }
+
+        runAgentBtn.disabled = true;
+        runAgentBtn.textContent = "分析中...";
+        agentOutput.style.display = "none";
+
+        try {
+            const data = await fetchJSON(`${API_BASE}/agent/run`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ detect_task_id: detectTaskId, kb_id: kbId, workflow_mode: workflowMode, stream: false }),
+            });
+
+            const result = data.data;
+            agentSummary.innerHTML = escapeHtml(result.summary || "暂无摘要");
+            agentTags.innerHTML = (result.tags || []).map((tag) => `
+                <span class="tag">${escapeHtml(tag)}</span>
+            `).join("");
+            agentSuggestion.innerHTML = escapeHtml(result.suggestion || "暂无审核建议");
+            agentOutput.style.display = "block";
+
+            await loadAgentSessions();
+        } catch (error) {
+            alert(`分析失败：${error.message}`);
+        } finally {
+            runAgentBtn.disabled = false;
+            runAgentBtn.textContent = "启动分析";
+        }
+    }
+
+    async function viewSessionDetail(sessionId) {
+        try {
+            const data = await fetchJSON(`${API_BASE}/agent/session/${sessionId}`);
+            const session = data.data;
+
+            agentSummary.innerHTML = escapeHtml(session.summary || "暂无摘要");
+            agentTags.innerHTML = (session.tags || []).map((tag) => `
+                <span class="tag">${escapeHtml(tag)}</span>
+            `).join("");
+            agentSuggestion.innerHTML = escapeHtml(session.suggestion || "暂无审核建议");
+            agentOutput.style.display = "block";
+        } catch (error) {
+            alert(`加载失败：${error.message}`);
+        }
+    }
+
+    runAgentBtn?.addEventListener("click", runAgentAnalysis);
+
+    await Promise.all([loadTasksForSelect(), loadKBsForSelect(), loadAgentSessions()]);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
