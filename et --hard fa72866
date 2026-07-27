@@ -1,0 +1,27 @@
+[33mdfcb535[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mbackend[m[33m, [m[1;31morigin/backend[m[33m)[m HEAD@{0}: commit (merge): merge: 合并 model 分支，解决 app.py 冲突
+[33m9d41e66[m HEAD@{1}: merge origin/Agent: Merge made by the 'ort' strategy.
+[33ma17ac56[m HEAD@{2}: reset: moving to HEAD
+[33ma17ac56[m HEAD@{3}: commit (merge): merge: 合并 frontend 分支，解决 app.py 冲突
+[33mfa72866[m HEAD@{4}: checkout: moving from main to backend
+[33mf5c96be[m[33m ([m[1;31morigin/model[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{5}: reset: moving to f5c96be
+[33mc2b8d09[m HEAD@{6}: checkout: moving from main to main
+[33mc2b8d09[m HEAD@{7}: commit (merge): Merge remote-tracking branch 'origin/backend'
+[33mb27bc72[m HEAD@{8}: commit (merge): merge: 合并 frontend 分支，解决 app.py 冲突
+[33mf5c96be[m[33m ([m[1;31morigin/model[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{9}: pull origin main: Fast-forward
+[33m7191847[m HEAD@{10}: checkout: moving from backend to main
+[33mfa72866[m HEAD@{11}: reset: moving to HEAD
+[33mfa72866[m HEAD@{12}: commit: feat(stats): 完成数据统计与报告导出接口
+[33m7b57fff[m HEAD@{13}: commit: feat(agent): Agent 分析接入 RAG 知识库检索
+[33m2d0db6c[m HEAD@{14}: commit: refactor(api): 对齐API文档规范，统一响应格式与路径
+[33mcf58f8d[m HEAD@{15}: commit: feat(agent): 完成 Agent 分析接口，接入 CV 模块
+[33m06e097d[m HEAD@{16}: checkout: moving from backend to backend
+[33m06e097d[m HEAD@{17}: checkout: moving from main to backend
+[33m7191847[m HEAD@{18}: reset: moving to 7191847
+[33m06e097d[m HEAD@{19}: checkout: moving from backend to main
+[33m06e097d[m HEAD@{20}: checkout: moving from main to backend
+[33m06e097d[m HEAD@{21}: commit: feat(auth): 完成用户注册、登录、JWT鉴权与任务关联
+[33m0b86a96[m HEAD@{22}: rebase (finish): returning to refs/heads/main
+[33m0b86a96[m HEAD@{23}: rebase (continue): feat(backend): 初始化后端结构与数据库连接
+[33m86a4948[m HEAD@{24}: pull origin main --rebase (start): checkout 86a4948f591c2f36cf500790d3a4636912f3009e
+[33m618999b[m HEAD@{25}: commit: feat(backend): 初始化后端结构与数据库连接
+[33mbb5463f[m HEAD@{26}: clone: from https://github.com/1722159583/digital-media-content-Understand-the-system.git

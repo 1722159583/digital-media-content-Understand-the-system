@@ -1,4 +1,4 @@
-"""Flask API for the video highlight extraction workspace."""
+﻿"""Flask API for the video highlight extraction workspace."""
 
 from __future__ import annotations
 
@@ -11,8 +11,6 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from routes.knowledge import knowledge_bp
-from routes.stats import stats_bp
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_cors import CORS
@@ -21,6 +19,8 @@ from werkzeug.utils import secure_filename
 # 导入路由
 from routes.auth import auth_bp
 from routes.agent import agent_bp
+from routes.knowledge import knowledge_bp
+from routes.stats import stats_bp
 from utils.response import success, error
 
 # 导入 CV 模块（如果存在）
@@ -87,8 +87,10 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
 
     def get_job(job_id: str) -> tuple[Path | None, dict[str, Any] | None]:
         directory = job_dir(job_id)
-        metadata = directory / "job.json" if directory else None
-        if not directory or not metadata or not metadata.is_file():
+        if not directory:
+            return None, None
+        metadata = directory / "job.json"
+        if not metadata.is_file():
             return None, None
         try:
             return directory, load_json(metadata)
@@ -180,33 +182,31 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             "cv_available": CV_AVAILABLE
         }, "服务正常")
 
-    # ========== 媒体素材上传 ==========
-    @app.post("/api/media/upload")
-    def upload_media():
+    # ========== 任务管理接口 ==========
+
+    @app.post("/api/jobs")
+    def create_job():
         upload = request.files.get("file")
         if not upload or not upload.filename:
-            return error("请使用 file 字段上传视频文件", 400)
+            return error("请上传视频文件", 400)
         if not allowed_file(upload.filename):
             return error(f"不支持的文件格式，仅支持：{', '.join(sorted(ALLOWED_EXTENSIONS))}", 400)
-        if request.content_length is not None and request.content_length <= 0:
-            return error("不允许上传空文件", 400)
 
         filename = secure_filename(upload.filename)
         if not filename:
             return error("文件名无效", 400)
-        
+
         job_id = f"{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:8]}"
         directory = outputs_dir() / job_id
         input_dir = directory / "input"
         input_dir.mkdir(parents=True)
         target = input_dir / filename
         upload.save(target)
-        
+
         if target.stat().st_size == 0:
             shutil.rmtree(directory)
             return error("不允许上传空文件", 400)
 
-        # 获取视频元数据
         media_info = {}
         try:
             import cv2
@@ -222,15 +222,6 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         except:
             pass
 
-        settings: dict[str, Any] = {}
-        raw_settings = request.form.get("settings")
-        if raw_settings:
-            try:
-                settings = json.loads(raw_settings)
-            except json.JSONDecodeError:
-                shutil.rmtree(directory)
-                return error("settings 必须是合法 JSON", 400)
-
         job = {
             "job_id": job_id,
             "project_name": request.form.get("project_name", "视频精彩片段提取"),
@@ -240,175 +231,93 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             "created_at": utc_now(),
             "started_at": None,
             "completed_at": None,
-            "settings": settings,
+            "settings": {},
             "result_file": None,
             "error": None,
-            "user_id": request.form.get("user_id"),
-            "media_info": media_info
+            "user_id": None,
+            "media_info": media_info,
+            "audit_status": "pending"
         }
         save_job(directory, job)
-        
-        return success({
-            "mediaId": job_id,
-            "preview_url": f"/outputs/{job_id}/input/{filename}",
-            "metadata": media_info
-        }, "上传成功", 201)
 
-    # ========== 检测任务列表 ==========
-    @app.get("/api/detect/task/list")
-    def list_tasks():
-        user_id = request.args.get("user_id")
-        status = request.args.get("status")
-        page = int(request.args.get("page", 1))
-        size = int(request.args.get("size", 10))
-        
+        return success({
+            "job": job,
+            "job_id": job_id
+        }, "任务创建成功", 201)
+
+    @app.get("/api/jobs")
+    def list_jobs():
         jobs = []
         for metadata in outputs_dir().glob("*/job.json"):
             try:
-                job = load_json(metadata)
-                if user_id and job.get("user_id") != user_id:
-                    continue
-                if status and job.get("status") != status:
-                    continue
-                jobs.append(job)
+                jobs.append(load_json(metadata))
             except (OSError, json.JSONDecodeError):
                 app.logger.warning("Ignoring unreadable metadata: %s", metadata)
-        
         jobs.sort(key=lambda item: item.get("created_at", ""), reverse=True)
-        total = len(jobs)
-        start = (page - 1) * size
-        end = start + size
-        
-        return success({
-            "list": jobs[start:end],
-            "total": total,
-            "page": page,
-            "size": size
-        })
+        return success({"jobs": jobs})
 
-    # ========== 获取检测任务详情 ==========
-    @app.get("/api/detect/task/<task_id>")
-    def get_task(task_id: str):
-        _, job = get_job(task_id)
+    @app.get("/api/jobs/<job_id>")
+    def get_job_endpoint(job_id: str):
+        _, job = get_job(job_id)
         if not job:
             return error("任务不存在", 404)
-        return success({"task": job})
+        return success({"job": job})
 
-    # ========== 创建检测任务 ==========
-    @app.post("/api/detect/task/create")
-    def create_detect_task():
-        data = request.get_json()
-        media_id = data.get("mediaId")
-        if not media_id:
-            return error("缺少 mediaId", 400)
-        
-        # 查找已有的任务
-        for metadata in outputs_dir().glob("*/job.json"):
-            try:
-                job = load_json(metadata)
-                if job.get("job_id") == media_id:
-                    return success({"taskId": media_id}, "任务已存在", 200)
-            except:
-                pass
-        
-        # 如果任务不存在，创建新任务
-        directory = outputs_dir() / media_id
-        if not directory.exists():
-            return error("素材不存在", 404)
-        
-        job_path = directory / "job.json"
-        if job_path.exists():
-            job = load_json(job_path)
-            job["status"] = "created"
-            save_job(directory, job)
-            return success({"taskId": media_id}, "任务已创建", 201)
-        
-        return error("无法创建任务", 500)
-
-    # ========== 运行检测分析 ==========
-    @app.post("/api/detect/task/<task_id>/analyze")
-    def analyze_task(task_id: str):
-        directory, job = get_job(task_id)
+    @app.post("/api/jobs/<job_id>/analyze")
+    def analyze_job(job_id: str):
+        directory, job = get_job(job_id)
         if not directory or not job:
             return error("任务不存在", 404)
         if job["status"] in {"queued", "running"}:
             return error("任务正在处理中", 409)
         if job["status"] == "completed":
-            return error("任务已完成；请新建任务以重新分析", 409)
-        
+            return error("任务已完成，请新建任务重新分析", 409)
+
         job["status"] = "queued"
         job["error"] = None
         save_job(directory, job)
-        
+
         if app.config["ANALYZE_ASYNC"]:
-            worker = threading.Thread(target=run_analysis, args=(task_id,), daemon=True, name=f"analysis-{task_id}")
+            worker = threading.Thread(target=run_analysis, args=(job_id,), daemon=True)
             worker.start()
         else:
-            run_analysis(task_id)
-        
-        return success({"taskId": task_id, "status": "queued"}, "任务已提交分析")
+            run_analysis(job_id)
 
-    # ========== 获取检测结果图 ==========
-    @app.get("/api/detect/task/<task_id>/draw-image")
-    def get_draw_image(task_id: str):
-        directory, job = get_job(task_id)
+        return success({"job": job, "job_id": job_id}, "分析任务已提交", 202)
+
+    @app.get("/api/jobs/<job_id>/report")
+    def get_report(job_id: str):
+        directory, job = get_job(job_id)
         if not directory or not job:
             return error("任务不存在", 404)
-        
-        # 返回证据帧作为结果图
-        evidence_dir = directory / "evidence"
-        if evidence_dir.exists():
-            evidence_files = list(evidence_dir.glob("*.jpg"))
-            if evidence_files:
-                return send_from_directory(evidence_dir, evidence_files[0].name)
-        
-        return error("结果图不存在", 404)
+        if not job.get("result_file"):
+            return error("分析结果尚未生成", 409)
+        report_path = directory / job["result_file"]
+        if not report_path.is_file():
+            return error("结果文件丢失", 500)
+        return success({"report": load_json(report_path)})
 
-    # ========== 多模型对比 ==========
-    @app.post("/api/detect/task/compare")
-    def compare_models():
-        data = request.get_json()
-        media_id = data.get("mediaId")
-        models = data.get("models", [])
-        
-        if not media_id:
-            return error("缺少 mediaId", 400)
-        
-        # 模拟对比数据
-        results = []
-        for i, model_name in enumerate(models or ["yolo11n", "yolo11s"]):
-            results.append({
-                "model": model_name,
-                "precision": round(0.75 + i * 0.05, 4),
-                "recall": round(0.68 + i * 0.04, 4),
-                "mAP": round(0.72 + i * 0.06, 4)
-            })
-        
-        return success({"results": results})
-
-    # ========== 任务审核 ==========
-    @app.patch("/api/detect/task/<task_id>/review")
-    def review_task(task_id: str):
-        directory, job = get_job(task_id)
+    @app.patch("/api/jobs/<job_id>/review")
+    def review_job(job_id: str):
+        directory, job = get_job(job_id)
         if not directory or not job:
             return error("任务不存在", 404)
-        
+
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
             return error("请求体必须是 JSON 对象", 400)
-        
+
         keyframe_id = payload.get("keyframe_id")
+        action = payload.get("action")
         if not keyframe_id:
             return error("keyframe_id 为必填项", 400)
-        
-        action = payload.get("action")
         if action not in {"keep", "ignore"}:
             return error("action 必须为 keep 或 ignore", 400)
-        
+
         report_path = directory / "analysis_report.json"
         if not report_path.exists():
             return error("分析结果尚未生成", 409)
-        
+
         report = load_json(report_path)
         for keyframe in report.get("keyframes", []):
             if keyframe.get("id") == keyframe_id:
@@ -417,38 +326,28 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
                 keyframe["note"] = payload.get("note", keyframe.get("note", ""))
                 write_json(report_path, report)
                 return success({"keyframe": keyframe}, "审核完成")
-        
+
         return error("关键帧不存在", 404)
 
-    # ========== 获取任务报告 ==========
-    @app.get("/api/detect/task/<task_id>/report")
-    def get_task_report(task_id: str):
-        directory, job = get_job(task_id)
-        if not directory or not job:
-            return error("任务不存在", 404)
-        if not job.get("result_file"):
-            return error("分析结果尚未生成", 409)
-        
-        report_path = directory / job["result_file"]
-        if not report_path.is_file():
-            return error("结果文件丢失", 500)
-        
-        report_data = load_json(report_path)
-        return success({"report": report_data})
-
-    # ========== 删除任务 ==========
-    @app.delete("/api/detect/task/<task_id>")
-    def delete_task(task_id: str):
-        directory, job = get_job(task_id)
+    @app.delete("/api/jobs/<job_id>")
+    def delete_job(job_id: str):
+        directory, job = get_job(job_id)
         if not directory or not job:
             return error("任务不存在", 404)
         if job["status"] in {"queued", "running"}:
             return error("正在处理的任务不能删除", 409)
-        
         shutil.rmtree(directory)
-        return success({"taskId": task_id}, "删除成功")
+        return success({"job_id": job_id}, "删除成功")
 
-    # ========== 输出文件访问 ==========
+    @app.post("/api/jobs/<job_id>/rough-cut")
+    def rough_cut(job_id: str):
+        directory, job = get_job(job_id)
+        if not directory or not job:
+            return error("任务不存在", 404)
+        if job["status"] != "completed":
+            return error("分析完成后才能生成粗剪视频", 409)
+        return error("粗剪功能等待 FFmpeg 模块接入", 501)
+
     @app.get("/outputs/<job_id>/<path:filename>")
     def output_file(job_id: str, filename: str):
         directory, _ = get_job(job_id)
@@ -464,6 +363,6 @@ app = create_app()
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", default=7880, type=int)
+    parser.add_argument("--port", default=5000, type=int)
     args = parser.parse_args()
     app.run(host=args.host, port=args.port, debug=False)

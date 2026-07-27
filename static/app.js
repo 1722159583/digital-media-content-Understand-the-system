@@ -14,8 +14,10 @@ let detailTimer = null;
 async function fetchJSON(url, options = {}) {
     const response = await fetch(url, options);
     const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.error || "请求失败");
-    return data;
+    if (!response.ok || data.code < 200 || data.code >= 300) {
+        throw new Error(data.msg || data.error || "请求失败");
+    }
+    return data.data;
 }
 
 function escapeHtml(value) {
@@ -38,7 +40,8 @@ function statusBadge(status) {
 
 async function renderJobList() {
     try {
-        const { jobs } = await fetchJSON(`${API_BASE}/jobs`);
+        const data = await fetchJSON(`${API_BASE}/jobs`);
+        const jobs = data.jobs || [];
         if (!jobs.length) {
             jobList.innerHTML = '<p class="loading-text">暂无任务，上传一个视频开始吧</p>';
             return;
@@ -92,7 +95,7 @@ async function renderJobDetail(jobId) {
     detailSection.style.display = "block";
     detailContent.innerHTML = '<p class="loading-text">正在读取任务详情...</p>';
     try {
-        const { job } = await fetchJSON(`${API_BASE}/jobs/${jobId}`);
+        const job = await fetchJSON(`${API_BASE}/jobs/${jobId}`);
         let html = `<div class="job-summary">
             <div><strong>任务 ID</strong><br>${escapeHtml(job.job_id)}</div>
             <div><strong>状态</strong><br>${statusBadge(job.status)}</div>
@@ -104,7 +107,7 @@ async function renderJobDetail(jobId) {
         if (job.status === "failed") {
             html += `<p class="error-text">分析失败：${escapeHtml(job.error || "未知错误")}</p>`;
         } else if (job.status === "completed" && job.result_file) {
-            const { report } = await fetchJSON(`${API_BASE}/jobs/${jobId}/report`);
+            const report = await fetchJSON(`${API_BASE}/jobs/${jobId}/report`);
             html += `<h3>分析概览</h3>${renderVideoInfo(report.video || {})}`;
             html += `<p class="loading-text">${escapeHtml(report.message || "分析完成")}</p>`;
             html += renderHighlights(report, jobId);
@@ -147,7 +150,7 @@ form.addEventListener("submit", async (event) => {
     submitBtn.disabled = true;
     submitBtn.textContent = "上传中...";
     try {
-        const { job } = await fetchJSON(`${API_BASE}/jobs`, { method: "POST", body: formData });
+        const job = await fetchJSON(`${API_BASE}/jobs`, { method: "POST", body: formData });
         await fetchJSON(`${API_BASE}/jobs/${job.job_id}/analyze`, { method: "POST" });
         fileInput.value = "";
         await renderJobList();
