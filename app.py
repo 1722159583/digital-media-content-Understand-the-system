@@ -981,6 +981,15 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         mimetype = "video/mp4" if filename.endswith(".mp4") else "image/jpeg" if filename.endswith((".jpg", ".jpeg")) else None
         return send_file(str(file_path), mimetype=mimetype, as_attachment=False)
 
+    @app.get("/source/<path:filename>")
+    def source_file(filename: str):
+        source_dir = BASE_DIR / "source"
+        file_path = source_dir / filename
+        if not file_path.is_file():
+            return api_error("文件不存在", 404)
+        mimetype = "video/mp4" if filename.endswith(".mp4") else "image/jpeg" if filename.endswith((".jpg", ".jpeg")) else None
+        return send_file(str(file_path), mimetype=mimetype, as_attachment=False)
+
     return app
 
 

@@ -313,6 +313,29 @@ function handleLogout() {
     });
 }
 
+function handleNavDropdown() {
+    const dropdownToggle = document.querySelector(".nav-dropdown-toggle");
+    const dropdownMenu = document.querySelector(".nav-dropdown-menu");
+    if (!dropdownToggle || !dropdownMenu) return;
+
+    dropdownToggle.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropdownMenu.classList.toggle("active");
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!dropdownMenu.contains(e.target) && !dropdownToggle.contains(e.target)) {
+            dropdownMenu.classList.remove("active");
+        }
+    });
+
+    dropdownMenu.addEventListener("click", (e) => {
+        e.stopPropagation();
+        dropdownMenu.classList.remove("active");
+    });
+}
+
 function logout() {
     removeAccessToken();
     removeRefreshToken();
@@ -1946,5 +1969,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (document.getElementById("main-app")) {
         checkAuthAndInit();
         handleLogout();
+        handleNavDropdown();
     }
 });

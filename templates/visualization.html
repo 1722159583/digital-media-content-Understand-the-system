@@ -3,11 +3,18 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>数据可视化 - 智能数字媒体内容理解系统</title>
+    <title>数据看板 - 游戏高光自动剪辑</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 </head>
-<body>
+<body class="main-page">
+    <div class="main-bg-video">
+        <video autoplay muted loop playsinline>
+            <source src="/source/y2mate.com - Star Guardian 2022  Official Orchestral Theme  League of Legends_1080p_1.mp4" type="video/mp4" />
+        </video>
+        <div class="main-bg-overlay"></div>
+    </div>
+
     <div id="auth-loading">
         <div class="loading-spinner"></div>
         <p>加载中...</p>
@@ -16,26 +23,35 @@
     <div id="main-app" style="display: none;">
         <header>
             <div class="header-left">
-                <h1>🎬 智能数字媒体内容理解系统</h1>
-                <span>基于 YOLO + Agent 的智能分析平台</span>
+                <div class="header-logo">
+                    <img src="/source/c47a07e29f04c6b4c1fdd4722953cc9d.jpg" alt="Logo" class="main-logo" />
+                    <div class="header-title">
+                        <h1>游戏高光自动剪辑</h1>
+                        <span>AI 智能剪辑助手</span>
+                    </div>
+                </div>
             </div>
             <div class="header-right">
                 <div id="user-info" class="user-info">
                     <span class="username">用户</span>
-                    <span class="role">普通用户</span>
-                    <button id="logout-btn" class="btn-logout">退出登录</button>
+                    <button id="logout-btn" class="btn-logout">退出</button>
                 </div>
             </div>
         </header>
 
         <nav class="main-nav">
-            <a href="/" class="nav-item">📊 任务管理</a>
-            <a href="/kb/manage" class="nav-item">📚 知识库管理</a>
-            <a href="/kb/search" class="nav-item">🔍 知识库检索</a>
-            <a href="/agent/analysis" class="nav-item">🤖 Agent分析</a>
-            <a href="/visualization" class="nav-item active">📈 数据可视化</a>
-            <a href="/stats" class="nav-item">📊 统计分析</a>
-            <a href="/model/compare" class="nav-item">⚡ 多模型对比</a>
+            <a href="/" class="nav-item">🎮 剪辑任务</a>
+            <a href="/visualization" class="nav-item active">📊 数据看板</a>
+            <a href="/stats" class="nav-item">📈 数据统计</a>
+            <div class="nav-dropdown">
+                <button class="nav-dropdown-toggle">⚙️ 高级工具</button>
+                <div class="nav-dropdown-menu">
+                    <a href="/kb/manage" class="nav-dropdown-item">📦 素材库管理</a>
+                    <a href="/kb/search" class="nav-dropdown-item">🔍 素材搜索</a>
+                    <a href="/agent/analysis" class="nav-dropdown-item">🤖 智能分析</a>
+                    <a href="/model/compare" class="nav-dropdown-item">⚡ 模型对比</a>
+                </div>
+            </div>
         </nav>
 
         <main>
