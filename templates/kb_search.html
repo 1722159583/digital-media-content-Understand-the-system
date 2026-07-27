@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>素材搜索 - 游戏高光自动剪辑</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
+</head>
+<body class="main-page">
+    <div class="main-bg-video">
+        <video autoplay muted loop playsinline>
+            <source src="/source/y2mate.com - Star Guardian 2022  Official Orchestral Theme  League of Legends_1080p_1.mp4" type="video/mp4" />
+        </video>
+        <div class="main-bg-overlay"></div>
+    </div>
+
+    <div id="auth-loading">
+        <div class="loading-spinner"></div>
+        <p>加载中...</p>
+    </div>
+
+    <div id="main-app" style="display: none;">
+        <header>
+            <div class="header-left">
+                <div class="header-logo">
+                    <img src="/source/c47a07e29f04c6b4c1fdd4722953cc9d.jpg" alt="Logo" class="main-logo" />
+                    <div class="header-title">
+                        <h1>游戏高光自动剪辑</h1>
+                        <span>AI 智能剪辑助手</span>
+                    </div>
+                </div>
+            </div>
+            <div class="header-right">
+                <div id="user-info" class="user-info">
+                    <span class="username">用户</span>
+                    <button id="logout-btn" class="btn-logout">退出</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="main-nav">
+            <a href="/" class="nav-item">🎮 剪辑任务</a>
+            <a href="/visualization" class="nav-item">📊 数据看板</a>
+            <a href="/stats" class="nav-item">📈 数据统计</a>
+            <div class="nav-dropdown">
+                <button class="nav-dropdown-toggle">⚙️ 高级工具</button>
+                <div class="nav-dropdown-menu">
+                    <a href="/kb/manage" class="nav-dropdown-item">📦 素材库管理</a>
+                    <a href="/kb/search" class="nav-dropdown-item active">🔍 素材搜索</a>
+                    <a href="/agent/analysis" class="nav-dropdown-item">🤖 智能分析</a>
+                    <a href="/model/compare" class="nav-dropdown-item">⚡ 模型对比</a>
+                </div>
+            </div>
+        </nav>
+
+        <main>
+            <section class="search-section">
+                <h2>🔍 知识库检索</h2>
+                <form id="search-form">
+                    <div class="search-group">
+                        <input type="text" id="search-query" placeholder="输入检索关键词，如：游戏角色、审核规范、素材分类..." required />
+                        <button type="submit" id="search-btn">检索</button>
+                    </div>
+                    <div class="search-options">
+                        <div class="form-group">
+                            <label>选择知识库</label>
+                            <select id="search-kb-id">
+                                <option value="">全部知识库</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>返回数量</label>
+                            <select id="search-top-k">
+                                <option value="5">5</option>
+                                <option value="10" selected>10</option>
+                                <option value="20">20</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>相似度阈值</label>
+                            <input type="range" id="search-threshold" min="0" max="1" step="0.1" value="0.5" />
+                            <span id="threshold-value">0.5</span>
+                        </div>
+                    </div>
+                </form>
+            </section>
+
+            <section class="search-results-section">
+                <div class="section-header">
+                    <h2>📄 检索结果</h2>
+                    <span id="results-count">共 0 条结果</span>
+                </div>
+                <div id="search-results" class="search-results">
+                    <p class="loading-text">请输入关键词进行检索</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

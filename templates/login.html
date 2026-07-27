@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>登录 - 游戏高光自动剪辑</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
+</head>
+<body class="login-page">
+    <div class="login-bg-video">
+        <video autoplay muted loop playsinline>
+            <source src="/source/LOL魔法少女.mp4" type="video/mp4" />
+        </video>
+        <div class="login-bg-overlay"></div>
+    </div>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <div class="logo-wrapper">
+                    <img src="/source/c47a07e29f04c6b4c1fdd4722953cc9d.jpg" alt="Logo" class="login-logo" />
+                </div>
+                <h1>游戏高光自动剪辑</h1>
+                <p>AI 自动识别精彩操作，一键生成高光集锦</p>
+            </div>
+            <form id="login-form">
+                <div class="form-group">
+                    <label>账号</label>
+                    <input type="text" id="username" placeholder="请输入账号" required autocomplete="username" />
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" id="password" placeholder="请输入密码" required autocomplete="current-password" />
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="remember-me" />
+                        <span>记住我</span>
+                    </label>
+                </div>
+                <button type="submit" id="login-btn" class="btn-primary">登录</button>
+                <div class="auth-links">
+                    <span>还没有账号？</span>
+                    <a href="/register">立即注册</a>
+                </div>
+            </form>
+            <div id="login-error" class="error-message" style="display: none;"></div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>素材库管理 - 游戏高光自动剪辑</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
+</head>
+<body class="main-page">
+    <div class="main-bg-video">
+        <video autoplay muted loop playsinline>
+            <source src="/source/y2mate.com - Star Guardian 2022  Official Orchestral Theme  League of Legends_1080p_1.mp4" type="video/mp4" />
+        </video>
+        <div class="main-bg-overlay"></div>
+    </div>
+
+    <div id="auth-loading">
+        <div class="loading-spinner"></div>
+        <p>加载中...</p>
+    </div>
+
+    <div id="main-app" style="display: none;">
+        <header>
+            <div class="header-left">
+                <div class="header-logo">
+                    <img src="/source/c47a07e29f04c6b4c1fdd4722953cc9d.jpg" alt="Logo" class="main-logo" />
+                    <div class="header-title">
+                        <h1>游戏高光自动剪辑</h1>
+                        <span>AI 智能剪辑助手</span>
+                    </div>
+                </div>
+            </div>
+            <div class="header-right">
+                <div id="user-info" class="user-info">
+                    <span class="username">用户</span>
+                    <button id="logout-btn" class="btn-logout">退出</button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="main-nav">
+            <a href="/" class="nav-item">🎮 剪辑任务</a>
+            <a href="/visualization" class="nav-item">📊 数据看板</a>
+            <a href="/stats" class="nav-item">📈 数据统计</a>
+            <div class="nav-dropdown">
+                <button class="nav-dropdown-toggle">⚙️ 高级工具</button>
+                <div class="nav-dropdown-menu">
+                    <a href="/kb/manage" class="nav-dropdown-item active">📦 素材库管理</a>
+                    <a href="/kb/search" class="nav-dropdown-item">🔍 素材搜索</a>
+                    <a href="/agent/analysis" class="nav-dropdown-item">🤖 智能分析</a>
+                    <a href="/model/compare" class="nav-dropdown-item">⚡ 模型对比</a>
+                </div>
+            </div>
+        </nav>
+
+        <main>
+            <section class="kb-section">
+                <div class="section-header">
+                    <h2>📚 知识库管理</h2>
+                    <button id="create-kb-btn" class="btn-primary">创建知识库</button>
+                </div>
+                
+                <div id="kb-list" class="kb-list">
+                    <p class="loading-text">加载知识库列表中...</p>
+                </div>
+            </section>
+
+            <section id="kb-detail-section" class="kb-detail-section" style="display:none;">
+                <div class="detail-header">
+                    <h2 id="kb-detail-title">知识库详情</h2>
+                    <button id="close-kb-detail">关闭</button>
+                </div>
+                <div id="kb-detail-content">
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <div id="create-kb-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>创建知识库</h3>
+                <button class="modal-close">×</button>
+            </div>
+            <form id="create-kb-form">
+                <div class="form-group">
+                    <label>知识库名称</label>
+                    <input type="text" id="kb-name" required placeholder="请输入知识库名称" />
+                </div>
+                <div class="form-group">
+                    <label>分类</label>
+                    <select id="kb-category">
+                        <option value="media_spec">媒体审核规范</option>
+                        <option value="game_rules">游戏素材规则</option>
+                        <option value="role_setting">角色设定</option>
+                        <option value="material_class">素材分类规则</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>描述</label>
+                    <textarea id="kb-description" rows="3" placeholder="请输入知识库描述"></textarea>
+                </div>
+                <button type="submit" class="btn-primary">创建</button>
+            </form>
+            <div id="create-kb-error" class="error-message" style="display: none;"></div>
+        </div>
+    </div>
+
+    <div id="upload-doc-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>上传文档</h3>
+                <button class="modal-close">×</button>
+            </div>
+            <form id="upload-doc-form">
+                <input type="hidden" id="upload-kb-id" />
+                <div class="form-group">
+                    <label>选择文档</label>
+                    <input type="file" id="doc-file" accept=".txt,.md,.pdf" required />
+                    <small>支持 txt、md、pdf 格式</small>
+                </div>
+                <button type="submit" class="btn-primary">上传</button>
+            </form>
+            <div id="upload-doc-error" class="error-message" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
