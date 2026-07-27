@@ -472,7 +472,7 @@ function renderHighlights(report, jobId) {
             ` : '';
             
             return `
-            <article class="keyframe-card" data-keyframe-id="${escapeHtml(frame.id)}">
+            <article class="keyframe-card" data-keyframe-id="${escapeHtml(frame.id)}" data-timestamp="${frame.timestamp ?? 0}">
                 ${frame.image_url ? `<img src="${escapeHtml(frame.image_url)}" alt="片段证据帧" loading="lazy">` : ""}
                 <div class="score">评分 ${Number(frame.score || 0).toFixed(3)}</div>
                 <div class="time">${frame.timestamp ?? 0} 秒</div>
@@ -520,6 +520,27 @@ async function renderJobDetail(jobId) {
         } else if (job.status === "completed" && job.result_file) {
             const reportData = await fetchJSON(`${API_BASE}/jobs/${jobId}/report`);
             const report = reportData.report;
+            const video = report.video || {};
+            
+            html += `<div class="video-player-section">
+                <h3>🎬 原始视频</h3>
+                <div class="video-container">
+                    <video id="original-video" controls style="width:100%;max-height:500px;">
+                        <source src="/outputs/${jobId}/input_video.mp4" type="video/mp4">
+                        您的浏览器不支持视频播放。
+                    </video>
+                    <div class="video-controls-overlay">
+                        <button class="seek-btn" data-seek="-5">⏪ -5s</button>
+                        <button class="seek-btn" data-seek="-1">⏪ -1s</button>
+                        <button class="seek-btn" data-seek="1">+1s ⏩</button>
+                        <button class="seek-btn" data-seek="5">+5s ⏩</button>
+                    </div>
+                    <div class="current-time-display">
+                        <span id="current-time">00:00</span> / <span id="duration-time">00:00</span>
+                    </div>
+                </div>
+                <p class="video-hint">💡 点击下方关键帧可跳转到视频对应时间点</p>
+            </div>`;
             
             html += `<div class="export-section">
                 <h3>📥 报告导出</h3>
@@ -530,7 +551,7 @@ async function renderJobDetail(jobId) {
                     <button class="btn-export btn-zip" data-job-id="${escapeHtml(jobId)}" data-export-type="zip">📦 审核包</button>
                 </div>
             </div>`;
-            html += `<h3>分析概览</h3>${renderVideoInfo(report.video || {})}`;
+            html += `<h3>分析概览</h3>${renderVideoInfo(video)}`;
             html += `<p class="loading-text">${escapeHtml(report.message || "分析完成")}</p>`;
             html += renderHighlights(report, jobId);
             
@@ -543,6 +564,8 @@ async function renderJobDetail(jobId) {
         detailContent.innerHTML = html;
         bindReviewButtons(jobId);
         bindExportButtons(jobId);
+        bindVideoControls();
+        bindKeyframeSeek();
     } catch (error) {
         detailContent.innerHTML = `<p class="error-text">加载详情失败：${escapeHtml(error.message)}</p>`;
     }
@@ -567,6 +590,56 @@ function bindReviewButtons(jobId) {
             }
         });
     });
+}
+
+function bindVideoControls() {
+    const video = document.getElementById("original-video");
+    const currentTimeEl = document.getElementById("current-time");
+    const durationEl = document.getElementById("duration-time");
+    
+    if (!video) return;
+    
+    video.addEventListener("loadedmetadata", () => {
+        durationEl.textContent = formatVideoTime(video.duration);
+    });
+    
+    video.addEventListener("timeupdate", () => {
+        currentTimeEl.textContent = formatVideoTime(video.currentTime);
+    });
+    
+    document.querySelectorAll(".seek-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            const seekSeconds = parseFloat(btn.dataset.seek);
+            video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + seekSeconds));
+        });
+    });
+}
+
+function bindKeyframeSeek() {
+    const video = document.getElementById("original-video");
+    if (!video) return;
+    
+    document.querySelectorAll(".keyframe-card").forEach((card) => {
+        card.addEventListener("click", (e) => {
+            if (e.target.closest("button")) return;
+            
+            const timestamp = parseFloat(card.dataset.timestamp);
+            if (!isNaN(timestamp)) {
+                video.currentTime = timestamp;
+                video.play().catch(() => {});
+                
+                document.querySelectorAll(".keyframe-card").forEach((c) => c.classList.remove("active-keyframe"));
+                card.classList.add("active-keyframe");
+            }
+        });
+    });
+}
+
+function formatVideoTime(seconds) {
+    if (isNaN(seconds) || seconds <= 0) return "00:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 }
 
 function bindExportButtons(jobId) {

@@ -1506,3 +1506,89 @@ button.secondary:hover {
         grid-template-columns: 1fr;
     }
 }
+
+.video-player-section {
+    background: #141a20;
+    border: 1px solid #2a313c;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.video-player-section h3 {
+    color: #e8edf2;
+    margin-bottom: 16px;
+    font-size: 16px;
+}
+
+.video-container {
+    position: relative;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.video-container video {
+    display: block;
+    border-radius: 8px;
+}
+
+.video-controls-overlay {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 0;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.seek-btn {
+    padding: 6px 12px;
+    background: #2a313c;
+    color: #e8edf2;
+    border: 1px solid #3a4553;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.seek-btn:hover {
+    background: #3a4553;
+    border-color: #4a5563;
+}
+
+.current-time-display {
+    text-align: center;
+    padding: 8px 0;
+    color: #c0c8d0;
+    font-family: monospace;
+    font-size: 14px;
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.video-hint {
+    color: #8898a8;
+    font-size: 13px;
+    margin-top: 8px;
+    text-align: center;
+}
+
+.keyframe-card {
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.keyframe-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.keyframe-card.active-keyframe {
+    border-color: #2a7a5a;
+    box-shadow: 0 0 0 2px rgba(42, 122, 90, 0.5);
+}
+
+.keyframe-card.active-keyframe img {
+    border: 2px solid #2a7a5a;
+}

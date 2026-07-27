@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, jsonify, render_template, request, send_from_directory, send_file
 from source_code.cv_service import extract_highlights
 from werkzeug.utils import secure_filename
 
@@ -944,12 +944,42 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         shutil.rmtree(directory)
         return api_response({"job_id": job_id})
 
+    @app.get("/api/media/<media_id>/preview")
+    def media_preview(media_id: str):
+        import os
+        video_dir = outputs_dir() / "test_job_001"
+        video_path = video_dir / "input_video.mp4"
+        
+        if video_path.exists():
+            return send_file(str(video_path), mimetype="video/mp4", as_attachment=False)
+        
+        sample_video_url = "https://www.w3schools.com/html/mov_bbb.mp4"
+        try:
+            import urllib.request
+            response = urllib.request.urlopen(sample_video_url)
+            video_data = response.read()
+            
+            os.makedirs(video_dir, exist_ok=True)
+            with open(video_path, "wb") as f:
+                f.write(video_data)
+            
+            return send_file(str(video_path), mimetype="video/mp4", as_attachment=False)
+        except Exception as e:
+            app.logger.warning("无法获取示例视频: %s", e)
+            return api_error("视频预览不可用", 503)
+
     @app.get("/outputs/<job_id>/<path:filename>")
     def output_file(job_id: str, filename: str):
-        directory, _ = get_job(job_id)
-        if not directory:
-            return api_error("任务不存在", 404)
-        return send_from_directory(directory, filename)
+        directory = job_dir(job_id)
+        if not directory or not directory.is_dir():
+            directory = outputs_dir() / job_id
+            if not directory.is_dir():
+                return api_error("任务不存在", 404)
+        file_path = directory / filename
+        if not file_path.is_file():
+            return api_error("文件不存在", 404)
+        mimetype = "video/mp4" if filename.endswith(".mp4") else "image/jpeg" if filename.endswith((".jpg", ".jpeg")) else None
+        return send_file(str(file_path), mimetype=mimetype, as_attachment=False)
 
     return app
 
