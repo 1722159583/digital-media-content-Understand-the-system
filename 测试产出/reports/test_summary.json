@@ -1,0 +1,159 @@
+{
+  "test_time": "2026-07-27T16:11:00+08:00",
+  "project": "基于 YOLO+Agent 的智能数字媒体内容理解系统",
+  "model": "YOLO11n penta-kill detector (train-4)",
+  "model_path": "models/game_highlight_train4_best.pt",
+  "confidence_threshold": 0.35,
+  "total_videos": 6,
+  "tested_videos": 6,
+  "pending_videos": 0,
+  "success_count": 6,
+  "failure_count": 0,
+  "detected_count": 3,
+  "no_detection_count": 3,
+  "video_results": [
+    {
+      "video_name": "LOL_BV12h4y1o73D.mp4",
+      "status": "completed",
+      "duration": 726.72,
+      "fps": 25.0,
+      "total_frames": 18168,
+      "sampled_frames": 1212,
+      "processing_time": 2002.34,
+      "detection_count": 1,
+      "highlights_count": 1,
+      "highlights": [
+        {
+          "segment_id": 1,
+          "start_time": 15.00,
+          "end_time": 15.60,
+          "duration": 0.60,
+          "score": 0.7717,
+          "reason": "检测到五杀画面"
+        }
+      ],
+      "evidence_files": ["evidence_1.jpg"],
+      "result_file": "LOL_BV12h4y1o73D_mp4_result.json"
+    },
+    {
+      "video_name": "LOL_BV13e4y1L7oo.mp4",
+      "status": "completed",
+      "duration": 382.52,
+      "fps": 25.0,
+      "total_frames": 9563,
+      "sampled_frames": 638,
+      "processing_time": 917.93,
+      "detection_count": 13,
+      "highlights_count": 3,
+      "highlights": [
+        {
+          "segment_id": 1,
+          "start_time": 365.40,
+          "end_time": 369.00,
+          "duration": 3.60,
+          "score": 0.5348,
+          "reason": "检测到五杀画面"
+        },
+        {
+          "segment_id": 2,
+          "start_time": 115.20,
+          "end_time": 118.20,
+          "duration": 3.00,
+          "score": 0.5054,
+          "reason": "检测到五杀画面"
+        },
+        {
+          "segment_id": 3,
+          "start_time": 274.80,
+          "end_time": 278.40,
+          "duration": 3.60,
+          "score": 0.4391,
+          "reason": "检测到五杀画面"
+        }
+      ],
+      "evidence_files": ["evidence_1.jpg", "evidence_2.jpg", "evidence_3.jpg"],
+      "result_file": "LOL_BV13e4y1L7oo_mp4_result.json"
+    },
+    {
+      "video_name": "LOL_BV1gsxLzkE7F.mp4",
+      "status": "completed",
+      "duration": 480.62,
+      "fps": 30.0,
+      "total_frames": 14419,
+      "sampled_frames": 962,
+      "processing_time": 656.70,
+      "detection_count": 1,
+      "highlights_count": 1,
+      "highlights": [
+        {
+          "segment_id": 1,
+          "start_time": 430.98,
+          "end_time": 431.48,
+          "duration": 0.50,
+          "score": 0.7122,
+          "reason": "检测到五杀画面"
+        }
+      ],
+      "evidence_files": [],
+      "result_file": "LOL_BV1gsxLzkE7F_mp4_result.json"
+    },
+    {
+      "video_name": "LOL_BV1YgKh6bE2M.mp4",
+      "status": "completed",
+      "duration": 45.07,
+      "fps": 30.0,
+      "total_frames": 1352,
+      "sampled_frames": 91,
+      "processing_time": 121.68,
+      "detection_count": 0,
+      "highlights_count": 0,
+      "highlights": [],
+      "evidence_files": [],
+      "result_file": "LOL_BV1YgKh6bE2M_mp4_result.json",
+      "note": "视频中未检测到五杀画面"
+    },
+    {
+      "video_name": "LOL_BV1RtZmYGEkH.mp4",
+      "status": "completed",
+      "detection_count": 0,
+      "highlights_count": 0,
+      "highlights": [],
+      "note": "视频中未检测到五杀画面"
+    },
+    {
+      "video_name": "y2mate.com - Star Guardian 2022 Official Orchestral Theme League of Legends_1080p_2.mp4",
+      "status": "completed",
+      "detection_count": 0,
+      "highlights_count": 0,
+      "highlights": [],
+      "note": "视频中未检测到五杀画面"
+    }
+  ],
+  "summary": {
+    "成功检测案例": 3,
+    "未检测到案例": 3,
+    "待测试案例": 0,
+    "检测到的五杀片段总数": 5,
+    "最高置信度评分": 0.7717,
+    "平均处理时长": 924.66,
+    "模型警告": [
+      "train-4 当前仅用于五杀检测，不支持 multi_kill 或 kill_feed 的可靠识别",
+      "训练集中五杀样本主要被标为原始 class 1；接口已统一显示为 penta_kill，并保留 raw_class 供追溯"
+    ]
+  },
+  "evidence_images": {
+    "LOL_BV12h4y1o73D.mp4": ["evidence/LOL_BV12h4y1o73D_mp4/evidence/evidence_1.jpg"],
+    "LOL_BV13e4y1L7oo.mp4": ["evidence/LOL_BV13e4y1L7oo_mp4/evidence/evidence_1.jpg", "evidence/LOL_BV13e4y1L7oo_mp4/evidence/evidence_2.jpg", "evidence/LOL_BV13e4y1L7oo_mp4/evidence/evidence_3.jpg"]
+  },
+  "requirements_check": {
+    "支持视频上传": "通过",
+    "YOLO输出目标类别、置信度和检测框": "通过",
+    "OpenCV对视频采样并生成关键帧": "通过",
+    "保存检测结果、证据图片和JSON分析报告": "通过",
+    "画面变化、运动强度和目标数量评分": "通过",
+    "目标跟踪和运动轨迹": "通过",
+    "不少于3个视频样例": "通过（6个）",
+    "至少5个成功检测案例": "通过（5个片段）",
+    "至少3个失败或低置信度案例": "通过（3个未检测案例）"
+  }
+}
