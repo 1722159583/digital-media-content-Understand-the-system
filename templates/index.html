@@ -3,108 +3,57 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>游戏高光自动剪辑</title>
+    <title>视频精彩片段提取系统</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}" />
 </head>
-<body class="main-page">
-    <div class="main-bg-video">
-        <video autoplay muted loop playsinline>
-            <source src="/source/y2mate.com - Star Guardian 2022  Official Orchestral Theme  League of Legends_1080p_1.mp4" type="video/mp4" />
-        </video>
-        <div class="main-bg-overlay"></div>
-    </div>
+<body>
 
-    <div id="auth-loading">
-        <div class="loading-spinner"></div>
-        <p>加载中...</p>
-    </div>
+    <header>
+        <h1>🎬 视频精彩片段提取系统</h1>
+        <span>小组项目 · 方向B</span>
+    </header>
 
-    <div id="main-app" style="display: none;">
-        <header>
-            <div class="header-left">
-                <div class="header-logo">
-                    <img src="/source/c47a07e29f04c6b4c1fdd4722953cc9d.jpg" alt="Logo" class="main-logo" />
-                    <div class="header-title">
-                        <h1>游戏高光自动剪辑</h1>
-                        <span>AI 智能剪辑助手</span>
-                    </div>
+    <main>
+        <!-- 上传区 -->
+        <section class="upload-section">
+            <h2>上传视频</h2>
+            <form id="upload-form">
+                <div class="form-group">
+                    <label>项目名称</label>
+                    <input type="text" id="project_name" value="" placeholder="请输入项目名称" />
                 </div>
-            </div>
-            <div class="header-right">
-                <div id="user-info" class="user-info">
-                    <span class="username">用户</span>
-                    <button id="logout-btn" class="btn-logout">退出</button>
+                <div class="form-group">
+                    <label>选择视频文件</label>
+                    <input type="file" id="video-file" accept="video/*" required />
                 </div>
-            </div>
-        </header>
-
-        <nav class="main-nav">
-            <a href="/" class="nav-item active">🎮 剪辑任务</a>
-            <a href="/visualization" class="nav-item">📊 数据看板</a>
-            <a href="/stats" class="nav-item">📈 数据统计</a>
-            <div class="nav-dropdown">
-                <button class="nav-dropdown-toggle">⚙️ 高级工具</button>
-                <div class="nav-dropdown-menu">
-                    <a href="/kb/manage" class="nav-dropdown-item">📦 素材库管理</a>
-                    <a href="/kb/search" class="nav-dropdown-item">🔍 素材搜索</a>
-                    <a href="/agent/analysis" class="nav-dropdown-item">🤖 智能分析</a>
-                    <a href="/model/compare" class="nav-dropdown-item">⚡ 模型对比</a>
+                <div class="form-group">
+                    <label>片段时长（秒）</label>
+                    <input type="number" id="clip_duration" value="6" min="3" max="15" />
+                    <small>以最高分关键帧为中心，前后各扩展一半时长</small>
                 </div>
-            </div>
-        </nav>
+                <button type="submit" id="submit-btn">创建任务</button>
+            </form>
+        </section>
 
-        <main class="main-layout">
-            <div class="main-sidebar">
-                <section class="upload-card">
-                    <div class="upload-header">
-                        <h2>🎬 上传游戏视频，一键生成高光</h2>
-                    </div>
-                    <form id="upload-form">
-                        <div class="form-group">
-                            <label>项目名称</label>
-                            <input type="text" id="project_name" value="星港遗迹" />
-                        </div>
-                        <div class="form-group">
-                            <label>选择视频文件</label>
-                            <div class="upload-dropzone" id="upload-dropzone">
-                                <input type="file" id="video-file" accept="video/*" required />
-                                <div class="dropzone-content">
-                                    <div class="dropzone-icon">📁</div>
-                                    <span>支持 MP4，可拖拽上传</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>片段时长（秒）</label>
-                            <input type="number" id="clip_duration" value="6" min="3" max="15" />
-                            <small>以最高分关键帧为中心，前后各扩展一半时长</small>
-                        </div>
-                        <button type="submit" id="submit-btn" class="btn-upload">开始生成高光</button>
-                    </form>
-                </section>
+        <!-- 任务列表 -->
+        <section class="jobs-section">
+            <h2>📋 任务列表</h2>
+            <div id="job-list">
+                <p class="loading-text">加载任务中...</p>
             </div>
+        </section>
 
-            <div class="main-content">
-                <section class="jobs-section">
-                    <div class="section-header">
-                        <h2>📋 我的任务</h2>
-                    </div>
-                    <div id="job-list">
-                        <p class="loading-text">加载任务中...</p>
-                    </div>
-                </section>
-
-                <section class="detail-section" id="detail-section" style="display:none;">
-                    <div class="detail-header">
-                        <h2>📄 任务详情</h2>
-                        <button id="close-detail">关闭</button>
-                    </div>
-                    <div id="detail-content">
-                    </div>
-                </section>
+        <!-- 任务详情（结果展示） -->
+        <section class="detail-section" id="detail-section" style="display:none;">
+            <div class="detail-header">
+                <h2>📄 任务详情</h2>
+                <button id="close-detail">关闭</button>
             </div>
-        </main>
-    </div>
+            <div id="detail-content">
+                <!-- 由 JS 动态渲染 -->
+            </div>
+        </section>
+    </main>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

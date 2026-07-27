@@ -27,7 +27,6 @@ def decode_jwt(token: str):
         return None
 
 def get_current_user():
-    """从请求头获取当前用户信息"""
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
         return None
@@ -35,7 +34,6 @@ def get_current_user():
     return decode_jwt(token)
 
 def login_required(f):
-    """登录验证装饰器"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         user = get_current_user()
