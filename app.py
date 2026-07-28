@@ -46,6 +46,15 @@ except (ImportError, AttributeError):
     extract_highlights = None
     load_model = None
 
+try:
+    from source_code.ffmpeg_service import FFmpegError, create_rough_cut, ffmpeg_available
+    FFMPEG_AVAILABLE = ffmpeg_available()
+except (ImportError, AttributeError):
+    FFmpegError = RuntimeError
+    create_rough_cut = None
+    ffmpeg_available = None
+    FFMPEG_AVAILABLE = False
+
 BASE_DIR = Path(__file__).resolve().parent
 DEFAULT_OUTPUT_DIR = BASE_DIR / "outputs"
 ALLOWED_EXTENSIONS = {"mp4", "mov", "avi", "mkv", "webm"}
@@ -271,6 +280,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             "cv_available": CV_AVAILABLE,
             "agent_available": AGENT_AVAILABLE,
             "rag_available": KB_AVAILABLE,
+            "ffmpeg_available": FFMPEG_AVAILABLE,
             "task": "penta_kill_detection",
         }, "服务正常")
 
@@ -490,7 +500,60 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             return error("任务不存在", 404)
         if job["status"] != "completed":
             return error("分析完成后才能生成粗剪视频", 409)
-        return error("粗剪功能等待 FFmpeg 模块接入", 501)
+        if not FFMPEG_AVAILABLE or create_rough_cut is None:
+            return error("FFmpeg 不可用，请安装 FFmpeg 并将其加入 PATH", 503)
+
+        report_path = directory / "analysis_report.json"
+        if not report_path.is_file():
+            return error("分析结果尚未生成", 409)
+        report = load_json(report_path)
+        highlights = report.get("highlights", [])
+        payload = request.get_json(silent=True) or {}
+        if not isinstance(payload, dict):
+            return error("请求体必须是 JSON 对象", 400)
+
+        segment_ids = payload.get("segment_ids")
+        if segment_ids is not None:
+            if not isinstance(segment_ids, list) or not segment_ids:
+                return error("segment_ids 必须是非空数组", 400)
+            selected = {str(item) for item in segment_ids}
+            highlights = [item for item in highlights if str(item.get("segment_id")) in selected]
+            if not highlights:
+                return error("没有找到指定的高光片段", 400)
+
+        raw_duration = payload.get("clip_duration", job.get("settings", {}).get("clip_duration", 6))
+        try:
+            clip_duration = float(raw_duration) if raw_duration is not None else None
+        except (TypeError, ValueError):
+            return error("clip_duration 必须是数字", 400)
+
+        try:
+            input_path = next(path for path in (directory / "input").iterdir() if path.is_file())
+            output_path = directory / "rough_cut.mp4"
+            result = create_rough_cut(
+                input_path,
+                output_path,
+                highlights,
+                clip_duration=clip_duration,
+                video_duration=report.get("video", {}).get("duration"),
+            )
+        except StopIteration:
+            return error("原始视频文件丢失", 500)
+        except (FFmpegError, OSError, ValueError) as exc:
+            app.logger.warning("Rough cut failed for %s: %s", job_id, exc)
+            return error(str(exc), 422)
+
+        rough_cut_result = {
+            **result,
+            "video_url": f"/outputs/{job_id}/rough_cut.mp4",
+            "download_url": f"/outputs/{job_id}/rough_cut.mp4?download=1",
+            "created_at": utc_now(),
+        }
+        report["rough_cut"] = rough_cut_result
+        write_json(report_path, report)
+        job["rough_cut"] = rough_cut_result
+        save_job(directory, job)
+        return success({"rough_cut": rough_cut_result}, "高光视频生成成功")
 
     @app.get("/outputs/<job_id>/<path:filename>")
     @authenticated
@@ -498,7 +561,7 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         directory, _ = get_job(job_id, user.get("user_id"))
         if not directory:
             return error("任务不存在", 404)
-        return send_from_directory(directory, filename)
+        return send_from_directory(directory, filename, as_attachment=request.args.get("download") == "1")
 
     return app
 

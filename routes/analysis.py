@@ -30,12 +30,69 @@ def _public_session(session: dict) -> dict:
 
 
 def _normalize_result(result: dict) -> dict:
-    summary = result.get("summary") or result.get("内容摘要") or result.get("摘要") or "分析完成"
-    tags = result.get("tags") or result.get("标签") or []
-    suggestion = result.get("suggestion") or result.get("审核建议") or result.get("建议") or "请人工复核分析结果"
+    normalized = _unwrap_result(result)
+    summary_keys = ("summary", "内容摘要", "摘要", "content_summary", "raw_output", "answer")
+    tag_keys = ("tags", "标签", "keywords", "关键词")
+    suggestion_keys = ("suggestion", "审核建议", "建议", "audit_suggestion", "conclusion", "审核结论")
+    summary = next((normalized.get(key) for key in summary_keys if normalized.get(key) not in (None, "")), "分析完成")
+    tags = next((normalized.get(key) for key in tag_keys if normalized.get(key) not in (None, "")), [])
+    suggestion = next(
+        (normalized.get(key) for key in suggestion_keys if normalized.get(key) not in (None, "")),
+        "请人工复核分析结果",
+    )
     if isinstance(tags, str):
         tags = [item.strip() for item in tags.replace("，", ",").split(",") if item.strip()]
-    return {"summary": str(summary), "tags": tags, "suggestion": str(suggestion), "raw_result": result}
+    elif not isinstance(tags, list):
+        tags = [tags]
+    consumed = set(summary_keys + tag_keys + suggestion_keys)
+    details = {key: value for key, value in normalized.items() if key not in consumed}
+    return {
+        "summary": _display_text(summary),
+        "tags": [_display_text(item) for item in tags],
+        "suggestion": _display_text(suggestion),
+        "details": details,
+        "raw_result": result,
+    }
+
+
+def _decode_json(value):
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if not stripped or stripped[0] not in "[{\"":
+        return value
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        return value
+
+
+def _unwrap_result(result) -> dict:
+    current = _decode_json(result)
+    for _ in range(4):
+        if not isinstance(current, dict):
+            return {"raw_output": current}
+        wrapper_key = next(
+            (key for key in ("output", "result", "data") if key in current and len(current) == 1),
+            None,
+        )
+        if not wrapper_key:
+            return current
+        decoded = _decode_json(current[wrapper_key])
+        if decoded == current:
+            break
+        current = decoded
+    return current if isinstance(current, dict) else {"raw_output": current}
+
+
+def _display_text(value) -> str:
+    if isinstance(value, str):
+        return value
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False, indent=2)
+    return str(value)
 
 
 def _run_for_user(user: dict, material_id: str, detection_result: dict | None = None) -> tuple[dict, int]:

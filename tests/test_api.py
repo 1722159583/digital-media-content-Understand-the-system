@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app import create_app
+from routes.analysis import _normalize_result
 from utils.auth import generate_jwt
 
 
@@ -153,6 +154,51 @@ class ApiTestCase(unittest.TestCase):
         response = protected_app.test_client().get("/api/jobs")
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json["code"], 401)
+
+    @patch("app.create_rough_cut")
+    @patch("app.FFMPEG_AVAILABLE", True)
+    def test_rough_cut_uses_report_highlights(self, create_rough_cut):
+        create_rough_cut.return_value = {
+            "filename": "rough_cut.mp4",
+            "segment_count": 1,
+            "duration": 6.0,
+            "size": 1234,
+            "segments": [{"segment_id": 1, "start_time": 0, "end_time": 6, "duration": 6}],
+        }
+        job = self.create_job(settings={"clip_duration": 6}).json["data"]["job"]
+        directory = Path(self.app.config["OUTPUT_DIR"]) / job["job_id"]
+        job.update(status="completed", result_file="analysis_report.json")
+        (directory / "job.json").write_text(json.dumps(job), encoding="utf-8")
+        report = {
+            "video": {"duration": 12.0},
+            "highlights": [{"segment_id": 1, "start_time": 2.0, "end_time": 3.0}],
+        }
+        (directory / "analysis_report.json").write_text(json.dumps(report), encoding="utf-8")
+
+        response = self.client.post(
+            f"/api/jobs/{job['job_id']}/rough-cut",
+            json={"clip_duration": 6},
+        )
+        self.assertEqual(response.status_code, 200)
+        rough_cut = response.json["data"]["rough_cut"]
+        self.assertEqual(rough_cut["video_url"], f"/outputs/{job['job_id']}/rough_cut.mp4")
+        self.assertEqual(create_rough_cut.call_args.kwargs["clip_duration"], 6.0)
+        saved_report = json.loads((directory / "analysis_report.json").read_text(encoding="utf-8"))
+        self.assertEqual(saved_report["rough_cut"]["segment_count"], 1)
+
+    def test_agent_result_normalization_keeps_extra_fields(self):
+        result = _normalize_result({
+            "output": json.dumps({
+                "内容摘要": "**检测完成**\n- 发现五杀",
+                "标签": "五杀，高光",
+                "审核结论": "建议通过",
+                "置信度": 0.93,
+            }, ensure_ascii=False)
+        })
+        self.assertIn("检测完成", result["summary"])
+        self.assertEqual(result["tags"], ["五杀", "高光"])
+        self.assertEqual(result["suggestion"], "建议通过")
+        self.assertEqual(result["details"]["置信度"], 0.93)
 
     def test_jobs_are_isolated_by_authenticated_user(self):
         protected_app = create_app({

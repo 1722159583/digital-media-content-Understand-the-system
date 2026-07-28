@@ -146,6 +146,51 @@ function escapeHtml(value) {
     return div.innerHTML;
 }
 
+function renderAgentText(value) {
+    const source = String(value ?? "").trim();
+    if (!source) return '<p class="empty-result">暂无内容</p>';
+    const inline = (line) => escapeHtml(line)
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/`([^`]+)`/g, "<code>$1</code>");
+    const blocks = [];
+    let listItems = [];
+    const flushList = () => {
+        if (listItems.length) {
+            blocks.push(`<ul>${listItems.join("")}</ul>`);
+            listItems = [];
+        }
+    };
+    source.split(/\r?\n/).forEach((rawLine) => {
+        const line = rawLine.trim();
+        const listMatch = line.match(/^[-*]\s+(.+)$/);
+        if (listMatch) {
+            listItems.push(`<li>${inline(listMatch[1])}</li>`);
+            return;
+        }
+        flushList();
+        if (!line) return;
+        const heading = line.match(/^#{1,4}\s+(.+)$/);
+        blocks.push(heading ? `<h4>${inline(heading[1])}</h4>` : `<p>${inline(line)}</p>`);
+    });
+    flushList();
+    return blocks.join("");
+}
+
+function renderStructuredValue(value, depth = 0) {
+    if (value === null || value === undefined || value === "") return '<span class="empty-result">-</span>';
+    if (typeof value !== "object") return `<div class="structured-text">${renderAgentText(value)}</div>`;
+    if (depth >= 3) return `<pre>${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
+    if (Array.isArray(value)) {
+        if (!value.length) return '<span class="empty-result">暂无数据</span>';
+        return `<ol class="structured-list">${value.map((item) => `<li>${renderStructuredValue(item, depth + 1)}</li>`).join("")}</ol>`;
+    }
+    const entries = Object.entries(value);
+    if (!entries.length) return '<span class="empty-result">暂无数据</span>';
+    return `<dl class="structured-grid">${entries.map(([key, item]) => `
+        <div><dt>${escapeHtml(key)}</dt><dd>${renderStructuredValue(item, depth + 1)}</dd></div>
+    `).join("")}</dl>`;
+}
+
 function formatTime(value) {
     return value ? new Date(value).toLocaleString("zh-CN") : "-";
 }
@@ -513,6 +558,22 @@ function renderHighlights(report, jobId) {
     </div>`;
 }
 
+function renderRoughCut(roughCut, jobId) {
+    if (!roughCut || !roughCut.video_url) return '<div id="rough-cut-result" class="video-result"></div>';
+    const token = encodeURIComponent(getAccessToken() || "");
+    const videoUrl = `${roughCut.video_url}?access_token=${token}`;
+    const downloadBase = roughCut.download_url || `${roughCut.video_url}?download=1`;
+    const downloadUrl = `${downloadBase}${downloadBase.includes("?") ? "&" : "?"}access_token=${token}`;
+    return `<div id="rough-cut-result" class="video-result">
+        <div class="rough-cut-meta">
+            <strong>高光成片</strong>
+            <span>${Number(roughCut.duration || 0).toFixed(1)} 秒 · ${roughCut.segment_count || 0} 个片段</span>
+        </div>
+        <video controls preload="metadata" src="${escapeHtml(videoUrl)}"></video>
+        <a class="download-link" href="${escapeHtml(downloadUrl)}">下载 MP4</a>
+    </div>`;
+}
+
 let detailTimer = null;
 
 async function renderJobDetail(jobId) {
@@ -571,7 +632,9 @@ async function renderJobDetail(jobId) {
                     <button class="btn-export btn-json" data-job-id="${escapeHtml(jobId)}" data-export-type="json">📄 JSON报告</button>
                     <button class="btn-export btn-html" data-job-id="${escapeHtml(jobId)}" data-export-type="html">🌐 HTML报告</button>
                     <button class="btn-export btn-zip" data-job-id="${escapeHtml(jobId)}" data-export-type="zip">📦 审核包</button>
+                    <button id="rough-cut-btn" class="btn-export btn-rough-cut" data-job-id="${escapeHtml(jobId)}">🎞 生成高光视频</button>
                 </div>
+                ${renderRoughCut(report.rough_cut, jobId)}
             </div>`;
             html += `<h3>分析概览</h3>${renderVideoInfo(video)}`;
             html += `<p class="loading-text">${escapeHtml(report.message || "分析完成")}</p>`;
@@ -588,9 +651,36 @@ async function renderJobDetail(jobId) {
         bindExportButtons(jobId);
         bindVideoControls();
         bindKeyframeSeek();
+        bindRoughCutButton(jobId);
     } catch (error) {
         detailContent.innerHTML = `<p class="error-text">加载详情失败：${escapeHtml(error.message)}</p>`;
     }
+}
+
+function bindRoughCutButton(jobId) {
+    const button = document.getElementById("rough-cut-btn");
+    if (!button) return;
+    button.addEventListener("click", async () => {
+        const clipDuration = Number(window.currentReportData?.job?.settings?.clip_duration) || 6;
+        button.disabled = true;
+        button.textContent = "正在生成...";
+        try {
+            const data = await fetchJSON(`${API_BASE}/jobs/${jobId}/rough-cut`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clip_duration: clipDuration }),
+            });
+            const result = getResponseData(data).rough_cut;
+            const container = document.getElementById("rough-cut-result");
+            if (container) container.outerHTML = renderRoughCut(result, jobId);
+            button.textContent = "重新生成高光视频";
+        } catch (error) {
+            alert(`生成失败：${error.message}`);
+            button.textContent = "生成高光视频";
+        } finally {
+            button.disabled = false;
+        }
+    });
 }
 
 function bindReviewButtons(jobId) {
@@ -1182,7 +1272,26 @@ async function initAgentAnalysis() {
     const agentSummary = document.getElementById("agent-summary");
     const agentTags = document.getElementById("agent-tags");
     const agentSuggestion = document.getElementById("agent-suggestion");
+    const agentResultMeta = document.getElementById("agent-result-meta");
+    const agentDetailsSection = document.getElementById("agent-details-section");
+    const agentDetails = document.getElementById("agent-details");
     const agentSessions = document.getElementById("agent-sessions");
+
+    function displayAgentResult(result) {
+        agentSummary.innerHTML = renderAgentText(result.summary || "暂无摘要");
+        const tags = Array.isArray(result.tags) ? result.tags : [];
+        agentTags.innerHTML = tags.length ? tags.map((tag) => `
+            <span class="tag">${escapeHtml(tag)}</span>
+        `).join("") : '<span class="empty-result">暂无标签</span>';
+        agentSuggestion.innerHTML = renderAgentText(result.suggestion || "暂无审核建议");
+        const details = result.details && typeof result.details === "object" ? result.details : {};
+        agentDetails.innerHTML = renderStructuredValue(details);
+        agentDetailsSection.style.display = Object.keys(details).length ? "block" : "none";
+        const taskLabel = result.detectTaskId ? `任务 ${result.detectTaskId}` : "Agent 分析结果";
+        agentResultMeta.innerHTML = `<strong>${escapeHtml(taskLabel)}</strong><span>${escapeHtml(formatTime(result.createdAt))}</span>`;
+        agentOutput.style.display = "block";
+        agentOutput.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
 
     async function loadTasksForSelect() {
         try {
@@ -1270,12 +1379,7 @@ async function initAgentAnalysis() {
             });
 
             const result = data.data;
-            agentSummary.innerHTML = escapeHtml(result.summary || "暂无摘要");
-            agentTags.innerHTML = (result.tags || []).map((tag) => `
-                <span class="tag">${escapeHtml(tag)}</span>
-            `).join("");
-            agentSuggestion.innerHTML = escapeHtml(result.suggestion || "暂无审核建议");
-            agentOutput.style.display = "block";
+            displayAgentResult(result);
 
             await loadAgentSessions();
         } catch (error) {
@@ -1291,12 +1395,7 @@ async function initAgentAnalysis() {
             const data = await fetchJSON(`${API_BASE}/agent/session/${sessionId}`);
             const session = data.data;
 
-            agentSummary.innerHTML = escapeHtml(session.summary || "暂无摘要");
-            agentTags.innerHTML = (session.tags || []).map((tag) => `
-                <span class="tag">${escapeHtml(tag)}</span>
-            `).join("");
-            agentSuggestion.innerHTML = escapeHtml(session.suggestion || "暂无审核建议");
-            agentOutput.style.display = "block";
+            displayAgentResult(session);
         } catch (error) {
             alert(`加载失败：${error.message}`);
         }

@@ -7,10 +7,12 @@
 ```powershell
 conda activate yolo
 python -m pip install -r requirements.txt
+ffmpeg -version
 python app.py --host 127.0.0.1 --port 7880
 ```
 
-访问 `http://127.0.0.1:7880/api/health` 确认服务状态。
+粗剪功能要求系统已安装 FFmpeg 且 `ffmpeg` 位于 `PATH`。访问
+`http://127.0.0.1:7880/api/health`，确认 `ffmpeg_available` 为 `true`。
 
 ## 后端职责
 
@@ -21,6 +23,8 @@ python app.py --host 127.0.0.1 --port 7880
 - 使用 `train-4` 正式权重检测五杀画面，返回类别、置信度、检测框和时间戳；
 - 计算画面变化、运动强度和目标数量得分，生成目标 ID 与轨迹；
 - 保存带检测框的关键证据帧，并标记低置信度或无检测结果；
+- 使用 FFmpeg 将高光时间段编码为 H.264/AAC，并合并为可预览、可下载的 MP4；
+- 解析并持久化 Agent 的摘要、标签、审核建议和额外结构化结果；
 - 当前仅支持 `penta_kill`，模型限制及实测结果见 [models/README.md](models/README.md)。
 
 接口约定见 [docs/API.md](docs/API.md)。
