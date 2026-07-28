@@ -8,11 +8,11 @@
 conda activate yolo
 python -m pip install -r requirements.txt
 ffmpeg -version
-python app.py --host 127.0.0.1 --port 7880
+python app.py --host 127.0.0.1 --port 7882
 ```
 
 粗剪功能要求系统已安装 FFmpeg 且 `ffmpeg` 位于 `PATH`。访问
-`http://127.0.0.1:7880/api/health`，确认 `ffmpeg_available` 为 `true`。
+`http://127.0.0.1:7882/api/health`，确认 `ffmpeg_available` 为 `true`。
 
 ## 后端职责
 

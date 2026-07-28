@@ -584,7 +584,7 @@ app = create_app()
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", default=7880, type=int)
+    parser.add_argument("--port", default=7882, type=int)
     parser.add_argument("--skip-model-preload", action="store_true", help="跳过启动阶段的模型预热")
     args = parser.parse_args()
     if not args.skip_model_preload:
