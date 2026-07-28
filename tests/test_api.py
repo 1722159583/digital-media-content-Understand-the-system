@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app import create_app
+from utils.auth import generate_jwt
 
 
 class ApiTestCase(unittest.TestCase):
@@ -15,6 +16,8 @@ class ApiTestCase(unittest.TestCase):
             "TESTING": True,
             "OUTPUT_DIR": Path(self.temp_dir.name) / "outputs",
             "ANALYZE_ASYNC": False,
+            "AUTH_REQUIRED": False,
+            "JOB_DB_SYNC": False,
         })
         self.client = self.app.test_client()
 
@@ -34,15 +37,15 @@ class ApiTestCase(unittest.TestCase):
     def test_health_and_job_creation(self):
         page = self.client.get("/")
         self.assertEqual(page.status_code, 200)
-        self.assertIn("视频精彩片段提取系统", page.get_data(as_text=True))
+        self.assertIn("游戏高光自动剪辑", page.get_data(as_text=True))
 
         health = self.client.get("/api/health")
         self.assertEqual(health.status_code, 200)
-        self.assertTrue(health.json["ok"])
+        self.assertEqual(health.json["data"]["status"], "ok")
 
         response = self.create_job()
         self.assertEqual(response.status_code, 201)
-        job = response.json["job"]
+        job = response.json["data"]["job"]
         self.assertEqual(job["status"], "created")
         self.assertTrue((Path(self.app.config["OUTPUT_DIR"]) / job["job_id"] / "job.json").exists())
 
@@ -51,14 +54,14 @@ class ApiTestCase(unittest.TestCase):
             "/api/jobs", data={"file": (io.BytesIO(b"data"), "sample.txt")}, content_type="multipart/form-data"
         )
         self.assertEqual(invalid.status_code, 400)
-        self.assertFalse(invalid.json["ok"])
+        self.assertEqual(invalid.json["code"], 400)
 
         empty = self.create_job(b"")
         self.assertEqual(empty.status_code, 400)
-        self.assertIn("空文件", empty.json["error"])
+        self.assertIn("空文件", empty.json["msg"])
 
     def test_job_lifecycle_errors_and_delete(self):
-        created = self.create_job().json["job"]
+        created = self.create_job().json["data"]["job"]
         missing_report = self.client.get(f"/api/jobs/{created['job_id']}/report")
         self.assertEqual(missing_report.status_code, 409)
 
@@ -67,13 +70,36 @@ class ApiTestCase(unittest.TestCase):
         self.assertFalse((Path(self.app.config["OUTPUT_DIR"]) / created["job_id"]).exists())
 
     def test_review_validation(self):
-        created = self.create_job().json["job"]
+        created = self.create_job().json["data"]["job"]
         response = self.client.patch(
             f"/api/jobs/{created['job_id']}/review", data=json.dumps({"keyframe_id": "k1", "action": "bad"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("keep", response.json["error"])
+        self.assertIn("keep", response.json["msg"])
+
+    def test_frontend_pages_are_registered(self):
+        for path in ("/kb/manage", "/kb/search", "/agent/analysis", "/visualization", "/stats", "/model/compare"):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 200)
+
+        source = self.client.get("/source/c47a07e29f04c6b4c1fdd4722953cc9d.jpg")
+        self.assertEqual(source.status_code, 200)
+        self.assertEqual(source.mimetype, "image/jpeg")
+        source.close()
+
+    def test_agent_routes_use_coze_and_require_authentication(self):
+        health = self.client.get("/api/agent/health")
+        self.assertEqual(health.status_code, 200)
+        self.assertEqual(health.json["data"]["engine"], "coze")
+
+        protected_app = create_app({
+            "TESTING": True,
+            "OUTPUT_DIR": Path(self.temp_dir.name) / "agent-outputs",
+            "JOB_DB_SYNC": False,
+        })
+        response = protected_app.test_client().post("/api/agent/run", json={"detect_task_id": "missing"})
+        self.assertEqual(response.status_code, 401)
 
     @patch("app.extract_highlights")
     def test_analysis_report_and_review_lifecycle(self, extract_highlights):
@@ -86,15 +112,15 @@ class ApiTestCase(unittest.TestCase):
             "processing_time": 0.3,
         }
         settings = {"confidence_threshold": 0.5, "tracking": False}
-        job = self.create_job(settings=settings).json["job"]
+        job = self.create_job(settings=settings).json["data"]["job"]
 
         analyzed = self.client.post(f"/api/jobs/{job['job_id']}/analyze")
         self.assertEqual(analyzed.status_code, 202)
-        self.assertEqual(self.client.get(f"/api/jobs/{job['job_id']}").json["job"]["status"], "completed")
+        self.assertEqual(self.client.get(f"/api/jobs/{job['job_id']}").json["data"]["job"]["status"], "completed")
         extract_highlights.assert_called_once()
         self.assertEqual(extract_highlights.call_args.kwargs["settings"], settings)
 
-        report = self.client.get(f"/api/jobs/{job['job_id']}/report").json["report"]
+        report = self.client.get(f"/api/jobs/{job['job_id']}/report").json["data"]["report"]
         self.assertEqual(report["video"]["duration"], 8.0)
         self.assertEqual(report["keyframes"][0]["id"], "segment_1")
 
@@ -104,7 +130,66 @@ class ApiTestCase(unittest.TestCase):
             content_type="application/json",
         )
         self.assertEqual(reviewed.status_code, 200)
-        self.assertEqual(reviewed.json["keyframe"]["review"], "keep")
+        self.assertEqual(reviewed.json["data"]["keyframe"]["review"], "keep")
+
+        reviewed = self.client.patch(
+            f"/api/jobs/{job['job_id']}/review",
+            data=json.dumps({"keyframe_id": "segment_1", "action": "pass", "note": "人工确认五杀"}),
+            content_type="application/json",
+        )
+        self.assertEqual(reviewed.status_code, 200)
+        keyframe = reviewed.json["data"]["keyframe"]
+        self.assertEqual(keyframe["review"], "pass")
+        self.assertEqual(keyframe["auditRecords"][-1]["note"], "人工确认五杀")
+        current_job = self.client.get(f"/api/jobs/{job['job_id']}").json["data"]["job"]
+        self.assertEqual(current_job["audit_status"], "pass")
+
+    def test_jobs_require_authentication_by_default(self):
+        protected_app = create_app({
+            "TESTING": True,
+            "OUTPUT_DIR": Path(self.temp_dir.name) / "protected-outputs",
+            "JOB_DB_SYNC": False,
+        })
+        response = protected_app.test_client().get("/api/jobs")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json["code"], 401)
+
+    def test_jobs_are_isolated_by_authenticated_user(self):
+        protected_app = create_app({
+            "TESTING": True,
+            "OUTPUT_DIR": Path(self.temp_dir.name) / "isolated-outputs",
+            "ANALYZE_ASYNC": False,
+            "JOB_DB_SYNC": False,
+        })
+        client = protected_app.test_client()
+        first_headers = {"Authorization": f"Bearer {generate_jwt('user-1', 'first')}"}
+        second_headers = {"Authorization": f"Bearer {generate_jwt('user-2', 'second')}"}
+        created = client.post(
+            "/api/jobs",
+            headers=first_headers,
+            data={"file": (io.BytesIO(b"video"), "sample.mp4")},
+            content_type="multipart/form-data",
+        ).json["data"]["job"]
+        self.assertEqual(client.get("/api/jobs", headers=second_headers).json["data"]["jobs"], [])
+        self.assertEqual(client.get(f"/api/jobs/{created['job_id']}", headers=second_headers).status_code, 404)
+
+    @patch("app.get_db")
+    def test_job_state_is_synchronized_to_mongodb(self, get_db):
+        collection = get_db.return_value.__getitem__.return_value
+        sync_app = create_app({
+            "TESTING": True,
+            "OUTPUT_DIR": Path(self.temp_dir.name) / "sync-outputs",
+            "AUTH_REQUIRED": False,
+            "JOB_DB_SYNC": True,
+        })
+        response = sync_app.test_client().post(
+            "/api/jobs",
+            data={"file": (io.BytesIO(b"video"), "sample.mp4")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(response.status_code, 201)
+        collection.replace_one.assert_called_once()
+        self.assertTrue(collection.replace_one.call_args.kwargs["upsert"])
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import bcrypt
 import jwt
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from functools import wraps
 from flask import request, jsonify
 from config import Config
@@ -16,7 +16,7 @@ def generate_jwt(user_id: str, username: str) -> str:
     payload = {
         'user_id': user_id,
         'username': username,
-        'exp': datetime.utcnow() + timedelta(seconds=Config.JWT_EXPIRY)
+        'exp': datetime.now(UTC) + timedelta(seconds=Config.JWT_EXPIRY)
     }
     return jwt.encode(payload, Config.JWT_SECRET, algorithm='HS256')
 
@@ -27,15 +27,16 @@ def decode_jwt(token: str):
         return None
 
 def get_current_user():
-    """从请求头获取当前用户信息"""
     auth_header = request.headers.get('Authorization')
-    if not auth_header or not auth_header.startswith('Bearer '):
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(' ', 1)[1]
+    else:
+        token = request.args.get('access_token')
+    if not token:
         return None
-    token = auth_header.split(' ')[1]
     return decode_jwt(token)
 
 def login_required(f):
-    """登录验证装饰器"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         user = get_current_user()

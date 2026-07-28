@@ -85,7 +85,7 @@ async function refreshTokenIfNeeded() {
 
 function isSuccessResponse(data) {
     if (data.code !== undefined) {
-        return data.code === 200;
+        return data.code >= 200 && data.code < 300;
     }
     return data.ok === true;
 }
@@ -496,7 +496,7 @@ function renderHighlights(report, jobId) {
             
             return `
             <article class="keyframe-card" data-keyframe-id="${escapeHtml(frame.id)}" data-timestamp="${frame.timestamp ?? 0}">
-                ${frame.image_url ? `<img src="${escapeHtml(frame.image_url)}" alt="片段证据帧" loading="lazy">` : ""}
+                ${frame.image_url ? `<img src="${escapeHtml(`${frame.image_url}?access_token=${encodeURIComponent(getAccessToken() || "")}`)}" alt="片段证据帧" loading="lazy">` : ""}
                 <div class="score">评分 ${Number(frame.score || 0).toFixed(3)}</div>
                 <div class="time">${frame.timestamp ?? 0} 秒</div>
                 <p>${escapeHtml(frame.label || "画面变化")}</p>
@@ -527,7 +527,7 @@ async function renderJobDetail(jobId) {
     
     try {
         const jobData = await fetchJSON(`${API_BASE}/jobs/${jobId}`);
-        const job = jobData.job;
+        const job = getResponseData(jobData).job;
         
         let html = `<div class="job-summary">
             <div><strong>任务 ID</strong><br>${escapeHtml(job.job_id)}</div>
@@ -542,14 +542,14 @@ async function renderJobDetail(jobId) {
             html += `<p class="error-text">分析失败：${escapeHtml(job.error || "未知错误")}</p>`;
         } else if (job.status === "completed" && job.result_file) {
             const reportData = await fetchJSON(`${API_BASE}/jobs/${jobId}/report`);
-            const report = reportData.report;
+            const report = getResponseData(reportData).report;
             const video = report.video || {};
             
             html += `<div class="video-player-section">
                 <h3>🎬 原始视频</h3>
                 <div class="video-container">
                     <video id="original-video" controls style="width:100%;max-height:500px;">
-                        <source src="/outputs/${jobId}/input_video.mp4" type="video/mp4">
+                        <source src="/outputs/${jobId}/input/${encodeURIComponent(job.asset_name)}?access_token=${encodeURIComponent(getAccessToken() || "")}" type="video/mp4">
                         您的浏览器不支持视频播放。
                     </video>
                     <div class="video-controls-overlay">
@@ -570,7 +570,6 @@ async function renderJobDetail(jobId) {
                 <div class="export-buttons">
                     <button class="btn-export btn-json" data-job-id="${escapeHtml(jobId)}" data-export-type="json">📄 JSON报告</button>
                     <button class="btn-export btn-html" data-job-id="${escapeHtml(jobId)}" data-export-type="html">🌐 HTML报告</button>
-                    <button class="btn-export btn-pdf" data-job-id="${escapeHtml(jobId)}" data-export-type="pdf">📕 PDF报告</button>
                     <button class="btn-export btn-zip" data-job-id="${escapeHtml(jobId)}" data-export-type="zip">📦 审核包</button>
                 </div>
             </div>`;
@@ -681,9 +680,6 @@ function bindExportButtons(jobId) {
                     break;
                 case "html":
                     exportHTML(data, jobId);
-                    break;
-                case "pdf":
-                    exportPDF(jobId);
                     break;
                 case "zip":
                     exportZIP(jobId);
@@ -808,33 +804,9 @@ function exportHTML(data, jobId) {
     downloadFile(blob, `${jobId}_analysis_report.html`);
 }
 
-function exportPDF(jobId) {
-    const accessToken = getAccessToken();
-    const url = `${API_BASE}/export/report`;
-    const headers = { "Content-Type": "application/json" };
-    if (accessToken) {
-        headers["Authorization"] = `Bearer ${accessToken}`;
-    }
-    
-    fetch(url, {
-        method: "POST",
-        headers: headers,
-        body: JSON.stringify({ agentSessionId: `agent_${jobId}`, format: "pdf" }),
-    }).then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        return response.blob();
-    }).then(blob => {
-        downloadFile(blob, `${jobId}_analysis_report.pdf`);
-    }).catch(error => {
-        alert(`PDF导出失败：${error.message}\n该功能需要后端支持`);
-    });
-}
-
 function exportZIP(jobId) {
     const accessToken = getAccessToken();
-    const url = `${API_BASE}/export/task/${jobId}/zip`;
+    const url = `${API_BASE}/stats/export/task/${jobId}/zip`;
     
     fetch(url, {
         method: "GET",
@@ -1345,30 +1317,8 @@ async function fetchDetectClassStats() {
         return getResponseData(data);
     } catch {
         return {
-            classDistribution: [
-                { class: "person", count: 156 },
-                { class: "car", count: 89 },
-                { class: "dog", count: 45 },
-                { class: "cat", count: 38 },
-                { class: "bicycle", count: 27 },
-                { class: "truck", count: 23 },
-                { class: "bird", count: 19 },
-                { class: "bus", count: 15 },
-                { class: "motorbike", count: 12 },
-                { class: "cow", count: 8 },
-            ],
-            confidenceDistribution: [
-                { range: "0.0-0.1", count: 5 },
-                { range: "0.1-0.2", count: 12 },
-                { range: "0.2-0.3", count: 28 },
-                { range: "0.3-0.4", count: 45 },
-                { range: "0.4-0.5", count: 67 },
-                { range: "0.5-0.6", count: 89 },
-                { range: "0.6-0.7", count: 112 },
-                { range: "0.7-0.8", count: 145 },
-                { range: "0.8-0.9", count: 178 },
-                { range: "0.9-1.0", count: 234 },
-            ],
+            classDistribution: [],
+            confidenceDistribution: [],
         };
     }
 }
@@ -1379,16 +1329,10 @@ async function fetchVideoTimeStats(taskId) {
         const data = await fetchJSON(url);
         return getResponseData(data);
     } catch {
-        const timeLabels = [];
-        const scores = [];
-        for (let i = 0; i <= 60; i += 5) {
-            timeLabels.push(`${i}s`);
-            scores.push(0.3 + Math.random() * 0.6 + Math.sin(i * 0.1) * 0.1);
-        }
         return {
-            timeLabels,
-            excitementScores: scores.map(s => Math.round(s * 100) / 100),
-            targetCounts: scores.map(() => Math.floor(Math.random() * 10) + 1),
+            timeLabels: [],
+            excitementScores: [],
+            targetCounts: [],
         };
     }
 }
@@ -1657,13 +1601,13 @@ async function fetchStatsOverview() {
         return responseData;
     } catch {
         return {
-            totalTasks: 128,
-            completedTasks: 98,
-            pendingTasks: 15,
-            failedTasks: 15,
-            totalMedia: 256,
-            imageCount: 180,
-            videoCount: 76,
+            totalTasks: 0,
+            completedTasks: 0,
+            pendingTasks: 0,
+            failedTasks: 0,
+            totalMedia: 0,
+            imageCount: 0,
+            videoCount: 0,
         };
     }
 }
@@ -1675,10 +1619,10 @@ async function fetchAuditStatusStats() {
         return responseData;
     } catch {
         return {
-            passCount: 45,
-            reviewCount: 23,
-            rejectCount: 12,
-            totalCount: 80,
+            passCount: 0,
+            reviewCount: 0,
+            rejectCount: 0,
+            totalCount: 0,
         };
     }
 }
@@ -1812,13 +1756,7 @@ async function fetchModelMetrics(models, confThreshold, iouThreshold) {
         return getResponseData(data);
     } catch {
         return {
-            metrics: [
-                { model: "yolov8n", precision: 0.852, recall: 0.786, map50: 0.821, map50_95: 0.583, inferenceTime: 8, modelSize: 6 },
-                { model: "yolov8s", precision: 0.875, recall: 0.821, map50: 0.856, map50_95: 0.632, inferenceTime: 15, modelSize: 14 },
-                { model: "yolov8m", precision: 0.891, recall: 0.845, map50: 0.878, map50_95: 0.678, inferenceTime: 28, modelSize: 28 },
-                { model: "yolov8l", precision: 0.903, recall: 0.862, map50: 0.892, map50_95: 0.701, inferenceTime: 45, modelSize: 48 },
-                { model: "yolov8x", precision: 0.912, recall: 0.875, map50: 0.901, map50_95: 0.715, inferenceTime: 68, modelSize: 64 },
-            ].filter(m => models.includes(m.model)),
+            metrics: [],
         };
     }
 }
@@ -1839,8 +1777,8 @@ function renderCompareTable(metrics) {
             <td>${(item.recall * 100).toFixed(1)}%</td>
             <td>${(item.map50 * 100).toFixed(1)}%</td>
             <td>${(item.map50_95 * 100).toFixed(1)}%</td>
-            <td>${item.inferenceTime} ms</td>
-            <td>${item.modelSize} MB</td>
+            <td>${item.inferenceTime ?? "-"}${item.inferenceTime == null ? "" : " ms"}</td>
+            <td>${item.modelSize ?? "-"}${item.modelSize == null ? "" : " MB"}</td>
         </tr>
     `).join("");
 }
