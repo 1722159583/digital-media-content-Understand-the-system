@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app import create_app
-from routes.analysis import _normalize_result
+from routes.analysis import _local_analysis, _normalize_result
 from utils.auth import generate_jwt
 
 
@@ -50,6 +50,12 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(job["status"], "created")
         self.assertTrue((Path(self.app.config["OUTPUT_DIR"]) / job["job_id"] / "job.json").exists())
 
+    def test_unknown_api_route_returns_json(self):
+        response = self.client.get("/api/does-not-exist")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.content_type, "application/json")
+        self.assertEqual(response.json["code"], 404)
+
     def test_rejects_invalid_and_empty_uploads(self):
         invalid = self.client.post(
             "/api/jobs", data={"file": (io.BytesIO(b"data"), "sample.txt")}, content_type="multipart/form-data"
@@ -92,7 +98,7 @@ class ApiTestCase(unittest.TestCase):
     def test_agent_routes_use_coze_and_require_authentication(self):
         health = self.client.get("/api/agent/health")
         self.assertEqual(health.status_code, 200)
-        self.assertEqual(health.json["data"]["engine"], "coze")
+        self.assertEqual(health.json["data"]["engine"], "coze_with_local_fallback")
 
         protected_app = create_app({
             "TESTING": True,
@@ -199,6 +205,26 @@ class ApiTestCase(unittest.TestCase):
         self.assertEqual(result["tags"], ["五杀", "高光"])
         self.assertEqual(result["suggestion"], "建议通过")
         self.assertEqual(result["details"]["置信度"], 0.93)
+
+    def test_local_agent_fallback_returns_structured_analysis(self):
+        result = _local_analysis(
+            {
+                "detection_count": 2,
+                "highlights": [
+                    {"start_time": 12.0, "end_time": 18.0, "score": 0.86, "reason": "检测到五杀画面"}
+                ],
+                "keyframes": [{"review": "pass"}],
+            },
+            {"name": "高光剪辑规则与标准", "matches": [{"text": "片段时长建议 6 秒", "score": 0.8}]},
+            "deep",
+            "COZE 网络不可用",
+        )
+        self.assertEqual(result["engine"], "local_offline")
+        self.assertIn("1 个高光候选片段", result["summary"])
+        self.assertEqual(result["details"]["知识库"], "高光剪辑规则与标准")
+        self.assertEqual(result["details"]["审核结论"], "建议通过")
+        self.assertNotIn("keyframes", result["raw_result"]["detection"])
+        self.assertEqual(len(result["raw_result"]["detection"]["highlights"]), 1)
 
     def test_jobs_are_isolated_by_authenticated_user(self):
         protected_app = create_app({

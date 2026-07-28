@@ -116,14 +116,27 @@ async function fetchJSON(url, options = {}) {
     }
     
     const response = await fetch(url, { ...options, headers });
-    const data = await response.json();
+    const responseText = await response.text();
+    let data;
+    try {
+        data = responseText ? JSON.parse(responseText) : {};
+    } catch {
+        const contentType = response.headers.get("content-type") || "未知类型";
+        throw new Error(`服务返回了非 JSON 响应（HTTP ${response.status}，${contentType}）`);
+    }
     
     if ((data.code === 401 || (data.ok === false && !isSuccessResponse(data))) && accessToken && !url.includes("/auth/refresh")) {
         try {
             const newToken = await refreshTokenIfNeeded();
             headers["Authorization"] = `Bearer ${newToken}`;
             const retryResponse = await fetch(url, { ...options, headers });
-            const retryData = await retryResponse.json();
+            const retryText = await retryResponse.text();
+            let retryData;
+            try {
+                retryData = retryText ? JSON.parse(retryText) : {};
+            } catch {
+                throw new Error(`服务返回了非 JSON 响应（HTTP ${retryResponse.status}）`);
+            }
             if (!isSuccessResponse(retryData)) {
                 throw new Error(getErrorMessage(retryData));
             }
@@ -1002,13 +1015,13 @@ async function initKBManage() {
             }
 
             kbList.innerHTML = kbs.map((kb) => `
-                <div class="kb-card" data-kb-id="${escapeHtml(kb.kbId)}">
+                <div class="kb-card" data-kb-id="${escapeHtml(kb.kbId || kb.kb_id)}">
                     <div class="kb-info">
                         <h3>${escapeHtml(kb.name)}</h3>
                         <p>${escapeHtml(kb.description || "暂无描述")}</p>
                         <div class="kb-meta">
                             <span class="kb-category">${escapeHtml(kb.category || "其他")}</span>
-                            <span class="kb-doc-count">文档数: ${kb.docCount || 0}</span>
+                            <span class="kb-doc-count">文档数: ${kb.docCount ?? kb.doc_count ?? 0}</span>
                         </div>
                     </div>
                     <div class="kb-actions">
@@ -1062,10 +1075,10 @@ async function initKBManage() {
             } else {
                 html += `<div class="doc-list">${docs.map((doc) => `
                     <div class="doc-item">
-                        <span class="doc-name">${escapeHtml(doc.name || doc.docId)}</span>
-                        <span class="doc-status">${doc.vectorStatus === "indexed" ? "已向量化" : "待索引"}</span>
-                        <span class="doc-chunks">分块数: ${doc.chunkCount || 0}</span>
-                        <button class="btn-delete-doc" data-doc-id="${escapeHtml(doc.docId)}">删除</button>
+                        <span class="doc-name">${escapeHtml(doc.name || doc.filename || doc.docId || doc.doc_id)}</span>
+                        <span class="doc-status">${(doc.vectorStatus || doc.vector_status) === "indexed" ? "已向量化" : "待索引"}</span>
+                        <span class="doc-chunks">分块数: ${doc.chunkCount ?? doc.chunk_count ?? 0}</span>
+                        <button class="btn-delete-doc" data-doc-id="${escapeHtml(doc.docId || doc.doc_id)}">删除</button>
                     </div>
                 `).join("")}</div>`;
             }
@@ -1275,6 +1288,7 @@ async function initAgentAnalysis() {
     const agentResultMeta = document.getElementById("agent-result-meta");
     const agentDetailsSection = document.getElementById("agent-details-section");
     const agentDetails = document.getElementById("agent-details");
+    const agentError = document.getElementById("agent-error");
     const agentSessions = document.getElementById("agent-sessions");
 
     function displayAgentResult(result) {
@@ -1290,6 +1304,7 @@ async function initAgentAnalysis() {
         const taskLabel = result.detectTaskId ? `任务 ${result.detectTaskId}` : "Agent 分析结果";
         agentResultMeta.innerHTML = `<strong>${escapeHtml(taskLabel)}</strong><span>${escapeHtml(formatTime(result.createdAt))}</span>`;
         agentOutput.style.display = "block";
+        agentError.style.display = "none";
         agentOutput.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
@@ -1370,6 +1385,7 @@ async function initAgentAnalysis() {
         runAgentBtn.disabled = true;
         runAgentBtn.textContent = "分析中...";
         agentOutput.style.display = "none";
+        agentError.style.display = "none";
 
         try {
             const data = await fetchJSON(`${API_BASE}/agent/run`, {
@@ -1383,7 +1399,8 @@ async function initAgentAnalysis() {
 
             await loadAgentSessions();
         } catch (error) {
-            alert(`分析失败：${error.message}`);
+            agentError.textContent = `分析失败：${error.message}`;
+            agentError.style.display = "block";
         } finally {
             runAgentBtn.disabled = false;
             runAgentBtn.textContent = "启动分析";

@@ -1,7 +1,8 @@
-from flask import Blueprint, request
+from flask import Blueprint, current_app, has_app_context, request
 from datetime import datetime
 import os
 import json
+import logging
 import uuid
 from pathlib import Path
 
@@ -13,17 +14,66 @@ from utils.response import success, error
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
+from sklearn.feature_extraction.text import HashingVectorizer
 
 knowledge_bp = Blueprint('knowledge', __name__, url_prefix='/api/kb')
 
-# 初始化 Embedding 模型（首次运行会自动下载）
-MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
+
+def _public_kb(kb):
+    return {
+        "kbId": kb.get("kb_id", ""),
+        "name": kb.get("name", ""),
+        "category": kb.get("category", "其他"),
+        "description": kb.get("description", ""),
+        "docCount": kb.get("doc_count", 0),
+        "chunkCount": kb.get("chunk_count", 0),
+        "createdAt": kb.get("created_at"),
+    }
+
+
+def _public_doc(doc):
+    return {
+        "docId": doc.get("doc_id", ""),
+        "name": doc.get("filename", ""),
+        "chunkCount": doc.get("chunk_count", 0),
+        "vectorStatus": doc.get("vector_status", "indexed"),
+        "uploadedAt": doc.get("uploaded_at"),
+    }
+
+# Set EMBEDDING_MODEL_PATH to use a downloaded SentenceTransformer model.
+MODEL_PATH = os.getenv("EMBEDDING_MODEL_PATH", "").strip()
 embedding_model = None
+
+
+class LocalHashEmbedding:
+    """Offline 384-dimensional text embedding fallback."""
+
+    def __init__(self):
+        self.vectorizer = HashingVectorizer(
+            n_features=384,
+            analyzer="char",
+            ngram_range=(2, 4),
+            alternate_sign=False,
+            norm="l2",
+        )
+
+    def encode(self, texts):
+        single = isinstance(texts, str)
+        values = [texts] if single else list(texts)
+        result = self.vectorizer.transform(values).toarray()
+        return result[0] if single else result
 
 def get_embedding_model():
     global embedding_model
     if embedding_model is None:
-        embedding_model = SentenceTransformer(MODEL_NAME)
+        logger = current_app.logger if has_app_context() else logging.getLogger(__name__)
+        if MODEL_PATH and Path(MODEL_PATH).is_dir():
+            try:
+                embedding_model = SentenceTransformer(MODEL_PATH, local_files_only=True)
+            except Exception as exc:
+                logger.warning("Local embedding model unavailable, using offline fallback: %s", exc)
+        if embedding_model is None:
+            embedding_model = LocalHashEmbedding()
     return embedding_model
 
 # 初始化 Chroma 客户端
@@ -38,7 +88,7 @@ chroma_client = chromadb.PersistentClient(
 def get_or_create_collection(kb_id: str):
     """获取或创建向量集合"""
     collections = chroma_client.list_collections()
-    collection_names = [c.name for c in collections]
+    collection_names = [item if isinstance(item, str) else item.name for item in collections]
     
     if kb_id in collection_names:
         return chroma_client.get_collection(kb_id)
@@ -112,11 +162,8 @@ def list_kb(user):
     total = db["knowledge_bases"].count_documents(query)
     kbs = list(db["knowledge_bases"].find(query).skip((page-1)*size).limit(size))
     
-    for kb in kbs:
-        kb["_id"] = str(kb["_id"])
-    
     return success({
-        "list": kbs,
+        "list": [_public_kb(kb) for kb in kbs],
         "total": total,
         "page": page,
         "size": size
@@ -223,11 +270,8 @@ def list_docs(user, kb_id):
     total = db["kb_documents"].count_documents({"kb_id": kb_id})
     docs = list(db["kb_documents"].find({"kb_id": kb_id}).skip((page-1)*size).limit(size))
     
-    for doc in docs:
-        doc["_id"] = str(doc["_id"])
-    
     return success({
-        "list": docs,
+        "list": [_public_doc(doc) for doc in docs],
         "total": total,
         "page": page,
         "size": size
@@ -272,7 +316,7 @@ def delete_doc(user, kb_id, doc_id):
 @login_required
 def retrieve(user):
     data = request.get_json()
-    kb_id = data.get('kbId')
+    kb_id = data.get('kbId') or data.get('kb_id')
     query_text = data.get('query_text')
     top_k = data.get('top_k', 3)
     score_threshold = data.get('score_threshold', 0.0)

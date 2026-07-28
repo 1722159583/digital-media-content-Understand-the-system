@@ -16,6 +16,7 @@ from typing import Any
 from flask import Flask, render_template, request, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException
 
 from routes.auth import auth_bp
 from routes.stats import stats_bp
@@ -103,6 +104,18 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
         app.register_blueprint(analysis_bp)
     if KB_AVAILABLE:
         app.register_blueprint(knowledge_bp)
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(exc):
+        if not request.path.startswith("/api/"):
+            if isinstance(exc, HTTPException):
+                return exc
+            app.logger.exception("Unhandled page error on %s", request.path)
+            return "Internal Server Error", 500
+        if isinstance(exc, HTTPException):
+            return error(exc.description or "请求失败", exc.code or 500)
+        app.logger.exception("Unhandled API error on %s", request.path)
+        return error("服务内部错误，请稍后重试", 500)
 
     # ========== 辅助函数 ==========
 
