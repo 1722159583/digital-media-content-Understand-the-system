@@ -217,7 +217,7 @@ async function handleLogin() {
                     setUserInfo(responseData.user);
                 }
                 
-                window.location.href = "/";
+                window.location.href = "/home";
             }
         } catch (error) {
             showError("login-error", error.message);
