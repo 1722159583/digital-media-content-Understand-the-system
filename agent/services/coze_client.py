@@ -1,6 +1,5 @@
 """CozeClient - 调用 COZE 工作流 API（使用官方 SDK）"""
 import json
-import os
 
 try:
     from cozepy import COZE_CN_BASE_URL, Coze, TokenAuth
@@ -9,14 +8,15 @@ except ImportError:  # Agent is optional for CV-only deployments.
     Coze = None
     TokenAuth = None
 
-WORKFLOW_ID = os.getenv("COZE_WORKFLOW_ID", "7666305339595489323")
+API_TOKEN = "pat_3MZe0LOiviUIHrcwspEYQzfHHWSkYO7pCyulIWbwnR2lL1FcMxdt30ttlhEdUabi"
+WORKFLOW_ID = "7666305339595489323"
 
 
 class CozeClient:
     """COZE 工作流客户端"""
 
     def __init__(self, token: str = None, workflow_id: str = None):
-        self.token = token or os.getenv("COZE_API_TOKEN", "")
+        self.token = token or API_TOKEN
         self.workflow_id = workflow_id or WORKFLOW_ID
         self._client = None
 
@@ -26,7 +26,7 @@ class CozeClient:
 
     def _get_client(self):
         if not self.ready:
-            raise RuntimeError("COZE 未配置：请安装 cozepy 并设置 COZE_API_TOKEN/COZE_WORKFLOW_ID")
+            raise RuntimeError("COZE 客户端不可用：请检查 cozepy 安装和直连配置")
         if self._client is None:
             self._client = Coze(auth=TokenAuth(token=self.token), base_url=COZE_CN_BASE_URL)
         return self._client
