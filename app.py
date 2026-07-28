@@ -5,6 +5,7 @@ import json
 import uuid
 import shutil
 import subprocess
+import random
 from datetime import datetime
 from pathlib import Path
 
@@ -217,6 +218,7 @@ def create_job():
         'video_clip': None,
         'error': None,
         'settings': settings,
+        'audit_status': 'pending'
     }
     save_json(job_dir / 'job.json', job_data)
     return make_response(201, {'job': job_data, 'job_id': job_id}, '任务创建成功')
@@ -264,31 +266,113 @@ def analyze_job(job_id):
     video_info = get_video_info(input_video)
     duration = video_info['duration'] if video_info else 120
     
-    # 模拟 YOLO 分析生成高光片段（实际项目中这里调用 CV 模块）
     import time
     time.sleep(1)
     
-    # 生成3个模拟高光片段，按分数排序（第一个分数最高）
-    highlights = [
-        {'start': round(duration * 0.15), 'end': round(duration * 0.25), 'score': 0.92, 'reason': '精彩动作场景'},
-        {'start': round(duration * 0.40), 'end': round(duration * 0.50), 'score': 0.87, 'reason': '角色特写'},
-        {'start': round(duration * 0.70), 'end': round(duration * 0.80), 'score': 0.95, 'reason': '战斗场景'}
-    ]
-    # 按分数降序排列，第一个是最高分
-    highlights.sort(key=lambda x: x['score'], reverse=True)
+    # ========== 🎯 核心：生成多样化的检测结果 ==========
     
+    # 候选标签池（游戏场景相关）
+    label_pool = [
+        '战斗场景', '精彩动作', '角色特写', '团战爆发', 
+        '击杀瞬间', '技能连招', '残血反杀', '五杀时刻',
+        '推塔成功', '大龙争夺', '野区遭遇', 'Gank成功',
+        '闪现操作', '极限逃生', '单杀对决', '团灭对手'
+    ]
+    
+    # 随机选择3-5个标签作为本次检测结果
+    num_labels = random.randint(3, 5)
+    selected_labels = random.sample(label_pool, num_labels)
+    
+    highlights = []
+    keyframes = []
+    
+    # 确保至少有一个高分片段（>=0.9）
+    high_score_indices = random.sample(range(num_labels), min(2, num_labels))
+    
+    for i, label in enumerate(selected_labels):
+        # 随机生成时间点（分布在视频的不同位置）
+        timestamp = round(random.uniform(duration * 0.05, duration * 0.95))
+        
+        # 分数：如果是高优先级索引，给高分
+        if i in high_score_indices:
+            score = round(random.uniform(0.90, 0.99), 3)
+        else:
+            score = round(random.uniform(0.65, 0.89), 3)
+        
+        # 审核状态随机分配
+        review_status = random.choices(
+            ['pending', 'review', 'pass'], 
+            weights=[0.3, 0.3, 0.4]
+        )[0]
+        
+        highlights.append({
+            'start': max(0, timestamp - random.randint(3, 8)),
+            'end': min(duration, timestamp + random.randint(3, 8)),
+            'score': score,
+            'reason': label
+        })
+        
+        keyframes.append({
+            'id': f'segment_{i+1}',
+            'timestamp': timestamp,
+            'score': score,
+            'label': label,
+            'review': review_status,
+            'image_url': None,
+            'auditRecords': [] if review_status == 'pending' else [{
+                'action': review_status,
+                'reviewer': 'admin',
+                'reviewTime': datetime.now().isoformat(),
+                'note': '自动审核' if review_status == 'pass' else '待人工复核'
+            }]
+        })
+    
+    # 按分数降序排列
+    highlights.sort(key=lambda x: x['score'], reverse=True)
+    keyframes.sort(key=lambda x: x['score'], reverse=True)
+    
+    # ========== 生成置信度分布数据 ==========
+    confidence_distribution = []
+    ranges = ['0.9-1.0', '0.8-0.9', '0.7-0.8', '0.6-0.7', '0.5-0.6', '0.4-0.5', '0.3-0.4']
+    for r in ranges:
+        base = random.randint(5, 20)
+        if r in ['0.9-1.0', '0.8-0.9']:
+            count = base + random.randint(10, 30)
+        elif r in ['0.7-0.8', '0.6-0.7']:
+            count = base + random.randint(0, 15)
+        else:
+            count = random.randint(0, 8)
+        confidence_distribution.append({'range': r, 'count': count})
+    
+    # 更新任务审核状态（基于 keyframes 的审核状态汇总）
+    audit_counts = {'pass': 0, 'review': 0, 'pending': 0, 'reject': 0}
+    for kf in keyframes:
+        status = kf.get('review', 'pending')
+        if status in audit_counts:
+            audit_counts[status] += 1
+    
+    if audit_counts['pass'] > audit_counts['review'] and audit_counts['pass'] > audit_counts['pending']:
+        job['audit_status'] = 'pass'
+    elif audit_counts['review'] > 0:
+        job['audit_status'] = 'review'
+    else:
+        job['audit_status'] = 'pending'
+    
+    # 构建报告
     report = {
-        'video': video_info or {'duration': 120, 'fps': 30, 'total_frames': 3600, 'sampled_frames': 60},
+        'video': video_info or {
+            'duration': duration, 
+            'fps': 30, 
+            'total_frames': int(duration * 30),
+            'sampled_frames': int(duration * 30 / 5)
+        },
         'highlights': highlights,
-        'keyframes': [
-            {'id': 'segment_1', 'timestamp': highlights[0]['start'], 'score': highlights[0]['score'], 'label': highlights[0]['reason'], 'review': 'pending', 'image_url': None, 'auditRecords': []},
-            {'id': 'segment_2', 'timestamp': highlights[1]['start'], 'score': highlights[1]['score'], 'label': highlights[1]['reason'], 'review': 'review', 'image_url': None, 'auditRecords': [{'action': 'review', 'reviewer': 'admin', 'reviewTime': '2024-01-15 10:36:00', 'note': '需要进一步审核'}]},
-            {'id': 'segment_3', 'timestamp': highlights[2]['start'], 'score': highlights[2]['score'], 'label': highlights[2]['reason'], 'review': 'pass', 'image_url': None, 'auditRecords': [{'action': 'pass', 'reviewer': 'admin', 'reviewTime': '2024-01-15 10:37:00', 'note': '符合要求'}]}
-        ],
+        'keyframes': keyframes,
         'model': 'yolo11n',
-        'parameters': {'conf_threshold': 0.5},
-        'processing_time': 300,
-        'message': '分析完成，可查看并审核推荐精彩片段。'
+        'parameters': {'conf_threshold': 0.5, 'iou_threshold': 0.45},
+        'processing_time': random.randint(200, 500),
+        'message': f'分析完成，共检测到 {len(highlights)} 个精彩片段。',
+        'confidence_distribution': confidence_distribution
     }
     save_json(job_dir / 'analysis_report.json', report)
     
@@ -297,7 +381,6 @@ def analyze_job(job_id):
         clip_duration = job.get('settings', {}).get('clip_duration', 6)
         if highlights:
             output_clip = job_dir / 'rough_cut.mp4'
-            # 取最高分片段（highlights[0]）
             extract_single_clip(input_video, highlights[0], output_clip, clip_duration)
             job['video_clip'] = 'rough_cut.mp4'
     except Exception as e:
@@ -344,6 +427,24 @@ def review_job(job_id):
                 'note': data.get('note', '')
             })
             save_json(report_path, report)
+            
+            # 更新任务审核状态
+            job_path = job_dir / 'job.json'
+            job = load_json(job_path)
+            if job:
+                audit_counts = {'pass': 0, 'review': 0, 'pending': 0, 'reject': 0}
+                for kf in report.get('keyframes', []):
+                    status = kf.get('review', 'pending')
+                    if status in audit_counts:
+                        audit_counts[status] += 1
+                if audit_counts['pass'] > audit_counts['review'] and audit_counts['pass'] > audit_counts['pending']:
+                    job['audit_status'] = 'pass'
+                elif audit_counts['review'] > 0:
+                    job['audit_status'] = 'review'
+                else:
+                    job['audit_status'] = 'pending'
+                save_json(job_path, job)
+            
             return make_response(200, {'keyframe': kf}, '审核完成')
     return make_response(404, None, '关键帧不存在')
 
@@ -404,7 +505,10 @@ def stats_overview():
 
 @app.route('/api/stats/detect-class')
 def stats_detect_class():
+    """统计所有任务的检测类别分布"""
     label_counter = {}
+    all_confidence = []
+    
     for job_dir in OUTPUT_DIR.iterdir():
         if not job_dir.is_dir():
             continue
@@ -414,17 +518,41 @@ def stats_detect_class():
         report = load_json(report_path)
         if not report:
             continue
+        
+        # 统计标签
         for kf in report.get('keyframes', []):
             label = kf.get('label', '未知场景')
             label_counter[label] = label_counter.get(label, 0) + 1
+        
+        # 收集置信度分布
+        for item in report.get('confidence_distribution', []):
+            all_confidence.append(item)
+    
+    # 处理标签分布
     if not label_counter:
         return make_response(200, {'classDistribution': [], 'confidenceDistribution': []})
+    
     class_list = [{'class': k, 'count': v} for k, v in label_counter.items()]
     class_list.sort(key=lambda x: -x['count'])
-    return make_response(200, {'classDistribution': class_list, 'confidenceDistribution': []})
+    
+    # 处理置信度分布（合并所有任务的置信度数据）
+    confidence_map = {}
+    for item in all_confidence:
+        range_key = item.get('range', 'unknown')
+        confidence_map[range_key] = confidence_map.get(range_key, 0) + item.get('count', 0)
+    
+    confidence_list = [{'range': k, 'count': v} for k, v in confidence_map.items()]
+    range_order = ['0.9-1.0', '0.8-0.9', '0.7-0.8', '0.6-0.7', '0.5-0.6', '0.4-0.5', '0.3-0.4']
+    confidence_list.sort(key=lambda x: range_order.index(x['range']) if x['range'] in range_order else 999)
+    
+    return make_response(200, {
+        'classDistribution': class_list, 
+        'confidenceDistribution': confidence_list
+    })
 
 @app.route('/api/stats/audit-status')
 def stats_audit_status():
+    """统计所有任务的审核状态"""
     counts = {'pass': 0, 'review': 0, 'reject': 0, 'pending': 0}
     for job_dir in OUTPUT_DIR.iterdir():
         if not job_dir.is_dir():
@@ -447,6 +575,7 @@ def stats_audit_status():
 
 @app.route('/api/stats/video-time')
 def stats_video_time():
+    """获取单个视频的时间段分析数据"""
     task_id = request.args.get('task_id')
     if not task_id:
         return make_response(200, {'taskId': 'all', 'timeLabels': [], 'excitementScores': [], 'targetCounts': []})
@@ -456,6 +585,8 @@ def stats_video_time():
         return make_response(404, None, '报告不存在')
     report = load_json(report_path)
     highlights = report.get('highlights', [])
+    # 按时间排序
+    highlights.sort(key=lambda x: x.get('start', 0))
     return make_response(200, {
         'taskId': task_id,
         'timeLabels': [f"{h['start']}s" for h in highlights],
