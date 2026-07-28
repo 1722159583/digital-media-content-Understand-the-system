@@ -1,9 +1,10 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask import Flask, request, jsonify, send_from_directory, render_template, send_file
 from werkzeug.utils import secure_filename
 import os
 import json
 import uuid
 import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -13,6 +14,12 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = BASE_DIR / "outputs"
 OUTPUT_DIR.mkdir(exist_ok=True)
+
+# ==================== 硬编码用户账号（简单验证） ====================
+VALID_USERS = {
+    'user': 'user123',
+    'admin': 'admin123'
+}
 
 # -------------------- 辅助函数 --------------------
 def save_json(path, data):
@@ -33,14 +40,60 @@ def make_response(code=200, data=None, msg='ok'):
         'traceId': str(uuid.uuid4()).replace('-', '')[:8]
     })
 
-def get_job(job_id):
-    job_dir = OUTPUT_DIR / job_id
-    job_path = job_dir / 'job.json'
-    if not job_path.exists():
-        return None, None
-    return job_dir, load_json(job_path)
+def find_ffmpeg():
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except:
+        pass
+    import shutil
+    for cmd in ['ffmpeg', 'ffmpeg.exe']:
+        path = shutil.which(cmd)
+        if path:
+            return path
+    raise RuntimeError("未找到 FFmpeg")
 
-# -------------------- 前端页面 --------------------
+def get_video_info(video_path):
+    """读取真实视频信息"""
+    import cv2
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return None
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration = total_frames / fps if fps > 0 else 0
+    cap.release()
+    return {'fps': round(fps, 2), 'total_frames': total_frames, 'duration': round(duration, 2)}
+
+def extract_single_clip(input_path, segment, output_path, clip_duration=6):
+    """
+    从视频中裁剪单个精彩片段
+    segment: {'start': 开始时间, 'end': 结束时间, 'score': 评分}
+    clip_duration: 目标片段时长（秒）
+    以 segment 的中心点为中心，前后各扩展 clip_duration/2 秒
+    """
+    center = (segment.get('start', 0) + segment.get('end', 0)) / 2
+    half = clip_duration / 2
+    start = max(0, center - half)
+    
+    ffmpeg_exe = find_ffmpeg()
+    cmd = [
+        ffmpeg_exe, "-y",
+        "-i", str(input_path),
+        "-ss", str(start),
+        "-t", str(clip_duration),
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-preset", "fast",
+        "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        str(output_path)
+    ]
+    subprocess.run(cmd, check=True, capture_output=True)
+    return output_path
+
+# ==================== 页面路由 ====================
 @app.route('/')
 def index():
     return render_template('login.html')
@@ -65,7 +118,6 @@ def visualization():
 def stats():
     return render_template('stats.html')
 
-# -------- 高级工具页面 --------
 @app.route('/kb/manage')
 def kb_manage():
     return render_template('kb_manage.html')
@@ -82,8 +134,6 @@ def agent_analysis():
 def model_compare():
     return render_template('model_compare.html')
 
-# ------------------------------------------
-
 @app.route('/static/<path:filename>')
 def static_files(filename):
     return send_from_directory('static', filename)
@@ -92,46 +142,46 @@ def static_files(filename):
 def source_files(filename):
     return send_from_directory('source', filename)
 
-@app.route('/<path:filename>')  # 捕获模板中可能请求的其他文件
-def catch_all(filename):
-    if filename.endswith('.html'):
-        return render_template(filename)
-    return send_from_directory('.', filename)
-
-# -------------------- 模拟用户认证（硬编码成功） --------------------
+# ==================== 认证 ====================
 @app.route('/api/auth/login', methods=['POST'])
 def login():
-    # 不校验账号密码，直接返回成功
-    return make_response(200, {
-        'access_token': 'mock_jwt_token',
-        'refresh_token': 'mock_refresh_token',
-        'user': {
-            'userId': 1,
-            'username': 'user',
-            'role': 'user',
-            'email': 'user@test.com'
-        },
-        'expires_in': 3600
-    }, '登录成功')
+    data = request.get_json()
+    if not data:
+        return make_response(400, None, '请求数据缺失')
+    
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    
+    if not username or not password:
+        return make_response(400, None, '请输入用户名和密码')
+    
+    # 验证用户名和密码
+    if username in VALID_USERS and VALID_USERS[username] == password:
+        # 登录成功
+        return make_response(200, {
+            'access_token': f'mock_jwt_token_{username}',
+            'refresh_token': f'mock_refresh_token_{username}',
+            'user': {
+                'userId': 1 if username == 'user' else 2,
+                'username': username,
+                'role': 'admin' if username == 'admin' else 'user',
+                'email': f'{username}@test.com'
+            },
+            'expires_in': 3600
+        }, '登录成功')
+    else:
+        return make_response(401, None, '用户名或密码错误')
 
 @app.route('/api/auth/current', methods=['GET'])
 def current_user():
-    return make_response(200, {
-        'userId': 1,
-        'username': 'user',
-        'role': 'user',
-        'email': 'user@test.com'
-    })
-
-@app.route('/api/auth/refresh', methods=['POST'])
-def refresh():
-    return make_response(200, {'access_token': 'new_mock_token', 'expires_in': 3600})
+    # 由于前端已经绕过 token 验证，这里返回默认用户
+    return make_response(200, {'userId': 1, 'username': 'user', 'role': 'user', 'email': 'user@test.com'})
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
     return make_response(200, None, '退出成功')
 
-# -------------------- 任务管理（文件存储） --------------------
+# ==================== 任务管理 ====================
 @app.route('/api/jobs', methods=['POST'])
 def create_job():
     if 'file' not in request.files:
@@ -147,6 +197,14 @@ def create_job():
     input_dir.mkdir()
     file.save(input_dir / filename)
     
+    # 从表单获取 clip_duration
+    settings = {}
+    try:
+        settings_raw = request.form.get('settings', '{}')
+        settings = json.loads(settings_raw)
+    except:
+        pass
+    
     job_data = {
         'job_id': job_id,
         'project_name': request.form.get('project_name', '未命名项目'),
@@ -156,8 +214,9 @@ def create_job():
         'started_at': None,
         'completed_at': None,
         'result_file': None,
+        'video_clip': None,
         'error': None,
-        'settings': {},
+        'settings': settings,
     }
     save_json(job_dir / 'job.json', job_data)
     return make_response(201, {'job': job_data, 'job_id': job_id}, '任务创建成功')
@@ -178,69 +237,53 @@ def list_jobs():
 
 @app.route('/api/jobs/<job_id>', methods=['GET'])
 def get_job(job_id):
-    job_dir, job = get_job(job_id)
-    if not job:
+    job_dir = OUTPUT_DIR / job_id
+    job_path = job_dir / 'job.json'
+    if not job_path.exists():
         return make_response(404, None, '任务不存在')
+    job = load_json(job_path)
     return make_response(200, {'job': job})
 
 @app.route('/api/jobs/<job_id>/analyze', methods=['POST'])
 def analyze_job(job_id):
-    job_dir, job = get_job(job_id)
-    if not job:
+    job_dir = OUTPUT_DIR / job_id
+    job_path = job_dir / 'job.json'
+    if not job_path.exists():
         return make_response(404, None, '任务不存在')
+    job = load_json(job_path)
     if job['status'] in ['running', 'queued']:
         return make_response(409, None, '任务正在处理中')
     if job['status'] == 'completed':
         return make_response(409, None, '任务已完成')
     
-    # 更新状态为排队中
     job['status'] = 'queued'
-    save_json(job_dir / 'job.json', job)
+    save_json(job_path, job)
     
-    # 模拟分析过程，直接生成报告
+    # 获取真实视频信息
+    input_video = list((job_dir / 'input').glob('*'))[0]
+    video_info = get_video_info(input_video)
+    duration = video_info['duration'] if video_info else 120
+    
+    # 模拟 YOLO 分析生成高光片段（实际项目中这里调用 CV 模块）
     import time
-    time.sleep(1)  # 模拟耗时
+    time.sleep(1)
+    
+    # 生成3个模拟高光片段，按分数排序（第一个分数最高）
+    highlights = [
+        {'start': round(duration * 0.15), 'end': round(duration * 0.25), 'score': 0.92, 'reason': '精彩动作场景'},
+        {'start': round(duration * 0.40), 'end': round(duration * 0.50), 'score': 0.87, 'reason': '角色特写'},
+        {'start': round(duration * 0.70), 'end': round(duration * 0.80), 'score': 0.95, 'reason': '战斗场景'}
+    ]
+    # 按分数降序排列，第一个是最高分
+    highlights.sort(key=lambda x: x['score'], reverse=True)
     
     report = {
-        'video': {
-            'duration': 120,
-            'fps': 30,
-            'total_frames': 3600,
-            'sampled_frames': 60
-        },
-        'highlights': [
-            {'start': 5, 'end': 11, 'score': 0.92, 'reason': '精彩动作场景'},
-            {'start': 25, 'end': 31, 'score': 0.87, 'reason': '角色特写'},
-            {'start': 45, 'end': 51, 'score': 0.95, 'reason': '战斗场景'}
-        ],
+        'video': video_info or {'duration': 120, 'fps': 30, 'total_frames': 3600, 'sampled_frames': 60},
+        'highlights': highlights,
         'keyframes': [
-            {
-                'id': 'segment_1',
-                'timestamp': 8,
-                'score': 0.92,
-                'label': '精彩动作场景',
-                'review': 'pending',
-                'image_url': None,
-                'auditRecords': []
-            },
-            {
-                'id': 'segment_2',
-                'timestamp': 28,
-                'score': 0.87,
-                'label': '角色特写',
-                'review': 'review',
-                'image_url': None,
-                'auditRecords': [{'action': 'review', 'reviewer': 'admin', 'reviewTime': '2024-01-15 10:36:00', 'note': '需要进一步审核'}]
-            },
-            {
-                'id': 'segment_3',
-                'timestamp': 48,
-                'score': 0.95,
-                'label': '战斗场景',
-                'review': 'pass',
-                'image_url': None,
-                'auditRecords': [{'action': 'pass', 'reviewer': 'admin', 'reviewTime': '2024-01-15 10:37:00', 'note': '符合要求'}]
-            }
+            {'id': 'segment_1', 'timestamp': highlights[0]['start'], 'score': highlights[0]['score'], 'label': highlights[0]['reason'], 'review': 'pending', 'image_url': None, 'auditRecords': []},
+            {'id': 'segment_2', 'timestamp': highlights[1]['start'], 'score': highlights[1]['score'], 'label': highlights[1]['reason'], 'review': 'review', 'image_url': None, 'auditRecords': [{'action': 'review', 'reviewer': 'admin', 'reviewTime': '2024-01-15 10:36:00', 'note': '需要进一步审核'}]},
+            {'id': 'segment_3', 'timestamp': highlights[2]['start'], 'score': highlights[2]['score'], 'label': highlights[2]['reason'], 'review': 'pass', 'image_url': None, 'auditRecords': [{'action': 'pass', 'reviewer': 'admin', 'reviewTime': '2024-01-15 10:37:00', 'note': '符合要求'}]}
         ],
         'model': 'yolo11n',
         'parameters': {'conf_threshold': 0.5},
@@ -248,39 +291,46 @@ def analyze_job(job_id):
         'message': '分析完成，可查看并审核推荐精彩片段。'
     }
     save_json(job_dir / 'analysis_report.json', report)
+    
+    # ===== 执行视频剪辑：只取最高分片段 =====
+    try:
+        clip_duration = job.get('settings', {}).get('clip_duration', 6)
+        if highlights:
+            output_clip = job_dir / 'rough_cut.mp4'
+            # 取最高分片段（highlights[0]）
+            extract_single_clip(input_video, highlights[0], output_clip, clip_duration)
+            job['video_clip'] = 'rough_cut.mp4'
+    except Exception as e:
+        print("视频剪辑失败:", e)
+        job['error'] = f"剪辑失败: {str(e)}"
+    
     job['status'] = 'completed'
     job['completed_at'] = datetime.now().isoformat()
     job['result_file'] = 'analysis_report.json'
-    save_json(job_dir / 'job.json', job)
+    save_json(job_path, job)
     
     return make_response(202, {'job': job, 'job_id': job_id}, '分析任务已提交')
 
 @app.route('/api/jobs/<job_id>/report', methods=['GET'])
 def get_report(job_id):
-    job_dir, job = get_job(job_id)
-    if not job:
-        return make_response(404, None, '任务不存在')
-    if not job.get('result_file'):
-        return make_response(409, None, '分析结果尚未生成')
-    report_path = job_dir / job['result_file']
+    job_dir = OUTPUT_DIR / job_id
+    report_path = job_dir / 'analysis_report.json'
     if not report_path.exists():
-        return make_response(500, None, '结果文件丢失')
+        return make_response(404, None, '报告不存在')
     report = load_json(report_path)
     return make_response(200, {'report': report})
 
 @app.route('/api/jobs/<job_id>/review', methods=['PATCH'])
 def review_job(job_id):
-    job_dir, job = get_job(job_id)
-    if not job:
-        return make_response(404, None, '任务不存在')
+    job_dir = OUTPUT_DIR / job_id
+    report_path = job_dir / 'analysis_report.json'
+    if not report_path.exists():
+        return make_response(404, None, '报告不存在')
     data = request.get_json()
     keyframe_id = data.get('keyframe_id')
     action = data.get('action')
     if not keyframe_id or action not in ['keep', 'ignore', 'pass', 'review', 'reject']:
         return make_response(400, None, '参数错误')
-    report_path = job_dir / 'analysis_report.json'
-    if not report_path.exists():
-        return make_response(409, None, '分析报告不存在')
     report = load_json(report_path)
     for kf in report.get('keyframes', []):
         if kf.get('id') == keyframe_id:
@@ -297,202 +347,126 @@ def review_job(job_id):
             return make_response(200, {'keyframe': kf}, '审核完成')
     return make_response(404, None, '关键帧不存在')
 
+@app.route('/api/jobs/<job_id>/download_clip', methods=['GET'])
+def download_clip(job_id):
+    job_dir = OUTPUT_DIR / job_id
+    clip_path = job_dir / 'rough_cut.mp4'
+    if not clip_path.exists():
+        return make_response(404, None, '剪辑视频不存在')
+    return send_file(clip_path, as_attachment=True, download_name=f'{job_id}_highlight.mp4')
+
+@app.route('/api/jobs/<job_id>/preview_clip', methods=['GET'])
+def preview_clip(job_id):
+    job_dir = OUTPUT_DIR / job_id
+    clip_path = job_dir / 'rough_cut.mp4'
+    if not clip_path.exists():
+        return make_response(404, None, '剪辑视频不存在')
+    return send_file(clip_path, mimetype='video/mp4')
+
 @app.route('/api/jobs/<job_id>', methods=['DELETE'])
 def delete_job(job_id):
-    job_dir, job = get_job(job_id)
-    if not job:
+    job_dir = OUTPUT_DIR / job_id
+    if not job_dir.exists():
         return make_response(404, None, '任务不存在')
-    if job.get('status') in ['queued', 'running']:
-        return make_response(409, None, '任务正在处理，无法删除')
     shutil.rmtree(job_dir)
     return make_response(200, {'job_id': job_id}, '删除成功')
 
-# -------------------- 统计API（供前端看板使用） --------------------
+# ==================== 统计接口 ====================
 @app.route('/api/stats/overview')
 def stats_overview():
-    # 模拟统计数据
+    total = completed = pending = failed = 0
+    for job_dir in OUTPUT_DIR.iterdir():
+        if not job_dir.is_dir():
+            continue
+        job_path = job_dir / 'job.json'
+        if not job_path.exists():
+            continue
+        job = load_json(job_path)
+        if not job:
+            continue
+        total += 1
+        status = job.get('status')
+        if status == 'completed':
+            completed += 1
+        elif status in ['created', 'queued', 'running']:
+            pending += 1
+        elif status == 'failed':
+            failed += 1
     return make_response(200, {
-        'totalTasks': 128,
-        'completedTasks': 98,
-        'pendingTasks': 15,
-        'failedTasks': 15,
-        'totalMedia': 256,
-        'imageCount': 180,
-        'videoCount': 76
+        'totalTasks': total,
+        'completedTasks': completed,
+        'pendingTasks': pending,
+        'failedTasks': failed,
+        'totalMedia': total,
+        'imageCount': 0,
+        'videoCount': total
     })
 
 @app.route('/api/stats/detect-class')
 def stats_detect_class():
-    return make_response(200, {
-        'classDistribution': [
-            {'class': 'person', 'count': 156},
-            {'class': 'car', 'count': 89},
-            {'class': 'dog', 'count': 45},
-            {'class': 'cat', 'count': 38},
-            {'class': 'bicycle', 'count': 27},
-            {'class': 'truck', 'count': 23},
-            {'class': 'bird', 'count': 19},
-            {'class': 'bus', 'count': 15},
-            {'class': 'motorbike', 'count': 12},
-            {'class': 'cow', 'count': 8}
-        ],
-        'confidenceDistribution': [
-            {'range': '0.0-0.1', 'count': 5},
-            {'range': '0.1-0.2', 'count': 12},
-            {'range': '0.2-0.3', 'count': 28},
-            {'range': '0.3-0.4', 'count': 45},
-            {'range': '0.4-0.5', 'count': 67},
-            {'range': '0.5-0.6', 'count': 89},
-            {'range': '0.6-0.7', 'count': 112},
-            {'range': '0.7-0.8', 'count': 145},
-            {'range': '0.8-0.9', 'count': 178},
-            {'range': '0.9-1.0', 'count': 234}
-        ]
-    })
+    label_counter = {}
+    for job_dir in OUTPUT_DIR.iterdir():
+        if not job_dir.is_dir():
+            continue
+        report_path = job_dir / 'analysis_report.json'
+        if not report_path.exists():
+            continue
+        report = load_json(report_path)
+        if not report:
+            continue
+        for kf in report.get('keyframes', []):
+            label = kf.get('label', '未知场景')
+            label_counter[label] = label_counter.get(label, 0) + 1
+    if not label_counter:
+        return make_response(200, {'classDistribution': [], 'confidenceDistribution': []})
+    class_list = [{'class': k, 'count': v} for k, v in label_counter.items()]
+    class_list.sort(key=lambda x: -x['count'])
+    return make_response(200, {'classDistribution': class_list, 'confidenceDistribution': []})
 
 @app.route('/api/stats/audit-status')
 def stats_audit_status():
+    counts = {'pass': 0, 'review': 0, 'reject': 0, 'pending': 0}
+    for job_dir in OUTPUT_DIR.iterdir():
+        if not job_dir.is_dir():
+            continue
+        job_path = job_dir / 'job.json'
+        if not job_path.exists():
+            continue
+        job = load_json(job_path)
+        if not job:
+            continue
+        audit = job.get('audit_status', 'pending')
+        if audit in counts:
+            counts[audit] += 1
     return make_response(200, {
-        'passCount': 45,
-        'reviewCount': 23,
-        'rejectCount': 12,
-        'totalCount': 80
+        'passCount': counts['pass'],
+        'reviewCount': counts['review'],
+        'rejectCount': counts['reject'],
+        'totalCount': sum(counts.values())
     })
 
 @app.route('/api/stats/video-time')
 def stats_video_time():
-    # 模拟视频时段数据
+    task_id = request.args.get('task_id')
+    if not task_id:
+        return make_response(200, {'taskId': 'all', 'timeLabels': [], 'excitementScores': [], 'targetCounts': []})
+    job_dir = OUTPUT_DIR / task_id
+    report_path = job_dir / 'analysis_report.json'
+    if not report_path.exists():
+        return make_response(404, None, '报告不存在')
+    report = load_json(report_path)
+    highlights = report.get('highlights', [])
     return make_response(200, {
-        'taskId': request.args.get('task_id', 'all'),
-        'timeLabels': [f"{i}s" for i in range(0, 61, 5)],
-        'excitementScores': [0.45, 0.52, 0.68, 0.71, 0.65, 0.58, 0.72, 0.85, 0.79, 0.62, 0.55, 0.48, 0.41],
-        'targetCounts': [5, 8, 12, 15, 10, 7, 9, 18, 14, 11, 6, 4, 3]
+        'taskId': task_id,
+        'timeLabels': [f"{h['start']}s" for h in highlights],
+        'excitementScores': [h['score'] for h in highlights],
+        'targetCounts': [1] * len(highlights)
     })
 
-@app.route('/api/stats/model-metric', methods=['POST'])
-def stats_model_metric():
-    # 模拟多模型指标
-    data = request.get_json()
-    models = data.get('models', ['yolov8n', 'yolov8s', 'yolov8m'])
-    return make_response(200, {
-        'metrics': [
-            {'model': 'yolov8n', 'precision': 0.852, 'recall': 0.786, 'map50': 0.821, 'map50_95': 0.583, 'inferenceTime': 8, 'modelSize': 6},
-            {'model': 'yolov8s', 'precision': 0.875, 'recall': 0.821, 'map50': 0.856, 'map50_95': 0.632, 'inferenceTime': 15, 'modelSize': 14},
-            {'model': 'yolov8m', 'precision': 0.891, 'recall': 0.845, 'map50': 0.878, 'map50_95': 0.678, 'inferenceTime': 28, 'modelSize': 28}
-        ]
-    })
-
-# -------------------- 高级工具API（供Agent同学后续接入） --------------------
-@app.route('/api/kb/list')
-def kb_list():
-    # 模拟知识库列表
-    return make_response(200, {
-        'list': [
-            {'kbId': 'kb_001', 'name': '媒体审核规范', 'category': 'media_spec', 'description': '包含数字媒体内容审核的标准和规范', 'docCount': 5, 'createdAt': '2024-01-15 10:00:00'},
-            {'kbId': 'kb_002', 'name': '游戏素材规则', 'category': 'game_rules', 'description': '游戏素材分类和使用规则', 'docCount': 8, 'createdAt': '2024-01-16 14:30:00'},
-            {'kbId': 'kb_003', 'name': '角色设定库', 'category': 'role_setting', 'description': '游戏角色设定和特征描述', 'docCount': 12, 'createdAt': '2024-01-17 09:00:00'}
-        ],
-        'total': 3
-    })
-
-@app.route('/api/kb/create', methods=['POST'])
-def kb_create():
-    data = request.get_json()
-    return make_response(201, {'kbId': 'kb_' + str(uuid.uuid4()).replace('-', '')[:8], 'name': data.get('name')}, '创建成功')
-
-@app.route('/api/kb/<kb_id>', methods=['DELETE'])
-def kb_delete(kb_id):
-    return make_response(200, None, '删除成功')
-
-@app.route('/api/kb/<kb_id>/doc/list')
-def kb_doc_list(kb_id):
-    return make_response(200, {
-        'list': [
-            {'docId': 'doc_001', 'name': '内容审核标准v1.md', 'chunkCount': 25, 'vectorStatus': 'indexed'},
-            {'docId': 'doc_002', 'name': '敏感内容识别规则.txt', 'chunkCount': 18, 'vectorStatus': 'indexed'}
-        ],
-        'total': 2
-    })
-
-@app.route('/api/kb/<kb_id>/doc/upload', methods=['POST'])
-def kb_doc_upload(kb_id):
-    return make_response(201, {'docId': 'doc_' + str(uuid.uuid4()).replace('-', '')[:8], 'chunkCount': 10}, '上传成功')
-
-@app.route('/api/kb/<kb_id>/doc/<doc_id>', methods=['DELETE'])
-def kb_doc_delete(kb_id, doc_id):
-    return make_response(200, None, '删除成功')
-
-@app.route('/api/kb/retrieve', methods=['POST'])
-def kb_retrieve():
-    data = request.get_json()
-    query_text = data.get('query_text', '')
-    return make_response(200, {
-        'results': [
-            {'text': f'根据查询 "{query_text}" 找到相关规范。数字媒体内容审核需要关注敏感信息识别、版权合规等方面。', 'score': 0.85, 'documentSource': '内容审核标准v1.md'},
-            {'text': f'根据查询 "{query_text}" 找到素材分类规范。游戏素材应按照类型、来源和用途进行分类管理。', 'score': 0.72, 'documentSource': '素材分类标准.md'}
-        ]
-    })
-
-@app.route('/api/agent/run', methods=['POST'])
-def agent_run():
-    data = request.get_json()
-    detect_task_id = data.get('detect_task_id')
-    return make_response(200, {
-        'sessionId': 'session_' + str(uuid.uuid4()).replace('-', '')[:8],
-        'summary': '视频内容分析完成。检测到多种游戏角色和道具，画面质量良好，运动强度适中。建议通过审核，可作为游戏宣传素材使用。',
-        'tags': ['游戏视频', '角色识别', '道具检测', '精彩片段'],
-        'suggestion': '建议通过审核，可作为游戏宣传素材使用。'
-    }, '分析完成')
-
-@app.route('/api/agent/session/list')
-def agent_session_list():
-    return make_response(200, {
-        'list': [
-            {'sessionId': 'session_001', 'detectTaskId': 'task_001', 'kbId': 'kb_001', 'status': 'completed', 'summary': '视频内容符合审核规范', 'tags': ['游戏视频', '安全审核通过'], 'suggestion': '建议通过审核', 'createdAt': '2024-01-18 10:30:00'}
-        ],
-        'total': 1
-    })
-
-@app.route('/api/agent/session/<session_id>')
-def agent_session_detail(session_id):
-    return make_response(200, {
-        'sessionId': session_id,
-        'detectTaskId': 'task_001',
-        'kbId': 'kb_001',
-        'status': 'completed',
-        'summary': '视频内容符合审核规范，主要包含游戏角色和场景画面，无敏感内容。',
-        'tags': ['游戏视频', '角色识别', '安全审核通过'],
-        'suggestion': '建议通过审核，可作为正常素材使用。',
-        'createdAt': '2024-01-18 10:30:00'
-    })
-
-@app.route('/api/detect/task/list')
-def detect_task_list():
-    return make_response(200, {
-        'list': [
-            {'taskId': 'task_001', 'mediaId': 'video_001', 'status': 'completed', 'createdAt': '2024-01-15 10:30:00'},
-            {'taskId': 'task_002', 'mediaId': 'video_002', 'status': 'completed', 'createdAt': '2024-01-15 11:45:00'}
-        ],
-        'total': 2
-    })
-
-@app.route('/api/detect/task/compare', methods=['POST'])
-def detect_task_compare():
-    data = request.get_json()
-    media_id = data.get('mediaId')
-    return make_response(200, {
-        'mediaId': media_id,
-        'comparisons': [
-            {'model': 'yolov8n', 'confidenceThreshold': 0.5, 'precision': 0.852, 'recall': 0.786, 'mAP50': 0.821, 'mAP50_95': 0.583, 'detectionCount': 156, 'inferenceTime': 8},
-            {'model': 'yolov8s', 'confidenceThreshold': 0.5, 'precision': 0.875, 'recall': 0.821, 'mAP50': 0.856, 'mAP50_95': 0.632, 'detectionCount': 168, 'inferenceTime': 15}
-        ]
-    })
-
-# -------------------- 健康检查 --------------------
+# ==================== 健康检查 ====================
 @app.route('/api/health')
 def health():
     return make_response(200, {'status': 'ok'})
 
-# -------------------- 启动 --------------------
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=5000, debug=True)
