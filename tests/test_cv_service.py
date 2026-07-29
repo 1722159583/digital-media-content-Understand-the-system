@@ -13,9 +13,11 @@ from source_code.cv_service import (
     calc_excitement_score,
     calculate_visual_scores,
     detect_frame,
+    detect_frames,
     extract_highlights,
     load_model,
     sample_frames,
+    stream_sampled_frames,
 )
 
 
@@ -32,13 +34,18 @@ class FakeResult:
 
 
 class FakeModel:
-    names = {0: "penta_kill", 1: "multi_kill", 2: "kill_feed"}
+    names = {0: "penta_kill", 1: "triple_kill", 2: "quadra_kill"}
 
-    def predict(self, frame, conf, verbose):
+    def __init__(self):
+        self.predict_calls = 0
+
+    def predict(self, frames, conf, verbose, **_kwargs):
+        self.predict_calls += 1
+        count = len(frames) if isinstance(frames, list) else 1
         return [FakeResult([
-            FakeBox(1, 0.91, [10, 20, 100, 80]),
-            FakeBox(2, 0.88, [1, 2, 3, 4]),
-        ])]
+            FakeBox(0, 0.91, [10, 20, 100, 80]),
+            FakeBox(1, 0.88, [1, 2, 3, 4]),
+        ]) for _ in range(count)]
 
 
 class CVServiceTestCase(unittest.TestCase):
@@ -63,8 +70,64 @@ class CVServiceTestCase(unittest.TestCase):
         detections = detect_frame(FakeModel(), np.zeros((120, 160, 3), dtype=np.uint8), 0.35)
         self.assertEqual(len(detections), 1)
         self.assertEqual(detections[0]["class"], "penta_kill")
-        self.assertEqual(detections[0]["raw_class"], "multi_kill")
+        self.assertEqual(detections[0]["raw_class"], "penta_kill")
         self.assertEqual(detections[0]["bbox"], [10.0, 20.0, 100.0, 80.0])
+
+    def test_batch_detection_uses_one_predict_call(self):
+        model = FakeModel()
+        frames = [np.zeros((120, 160, 3), dtype=np.uint8) for _ in range(4)]
+        detections = detect_frames(model, frames, 0.35)
+        self.assertEqual(model.predict_calls, 1)
+        self.assertEqual(len(detections), 4)
+        self.assertTrue(all(len(items) == 1 for items in detections))
+
+    @patch("source_code.cv_service.cv2.VideoCapture")
+    def test_stream_sampling_is_lazy_and_releases_capture(self, mocked_video_capture):
+        class FakeCapture:
+            def __init__(self):
+                self.position = 0
+                self.read_calls = 0
+                self.released = False
+
+            def isOpened(self):
+                return True
+
+            def get(self, prop):
+                if prop == cv2.CAP_PROP_FRAME_COUNT:
+                    return 6
+                if prop == cv2.CAP_PROP_FPS:
+                    return 3
+                return 0
+
+            def read(self):
+                self.read_calls += 1
+                if self.position >= 6:
+                    return False, None
+                frame = np.full((4, 4, 3), self.position, dtype=np.uint8)
+                self.position += 1
+                return True, frame
+
+            def grab(self):
+                if self.position >= 6:
+                    return False
+                self.position += 1
+                return True
+
+            def release(self):
+                self.released = True
+
+        capture = FakeCapture()
+        mocked_video_capture.return_value = capture
+        with tempfile.TemporaryDirectory() as directory:
+            video = Path(directory) / "video.mp4"
+            video.write_bytes(b"video")
+            stream, metadata = stream_sampled_frames(video, sample_interval=2)
+            self.assertEqual(capture.read_calls, 0)
+            frames = list(stream)
+
+        self.assertEqual([item["frame_index"] for item in frames], [0, 2, 4])
+        self.assertEqual(metadata["sampled_count"], 3)
+        self.assertTrue(capture.released)
 
     def test_threshold_validation(self):
         with self.assertRaises(ValueError):
@@ -95,27 +158,57 @@ class CVServiceTestCase(unittest.TestCase):
         self.assertEqual(len(tracker.export()[0]["points"]), 2)
 
     @patch("source_code.cv_service.load_model", return_value=FakeModel())
-    @patch("source_code.cv_service.sample_frames")
-    def test_extract_contract_and_settings(self, mocked_sample, _mocked_model):
+    @patch("source_code.cv_service.stream_sampled_frames")
+    def test_extract_contract_and_settings(self, mocked_stream, _mocked_model):
         image = np.zeros((120, 160, 3), dtype=np.uint8)
-        mocked_sample.return_value = {
-            "frames": [{"frame_index": 0, "timestamp": 0.0, "image": image}],
+        metadata = {
             "total_frames": 30,
             "fps": 30.0,
             "duration": 1.0,
             "sampled_count": 1,
         }
+        mocked_stream.return_value = (iter([
+            {"frame_index": 0, "timestamp": 0.0, "image": image},
+        ]), metadata)
         result = extract_highlights("ignored.mp4", settings={
             "confidence_threshold": 0.5,
             "sample_interval": 10,
+            "batch_size": 8,
             "tracking": True,
         })
         self.assertEqual(result["status"], "completed")
         self.assertEqual(result["detection_count"], 1)
         self.assertEqual(result["detections"][0]["detections"][0]["class"], "penta_kill")
         self.assertEqual(result["parameters"]["confidence_threshold"], 0.5)
+        self.assertEqual(result["parameters"]["batch_size"], 8)
         self.assertEqual(result["model"]["task"], "penta_kill_detection")
         self.assertTrue(result["trajectories"])
+
+    @patch("source_code.cv_service.stream_sampled_frames")
+    @patch("source_code.cv_service.load_model")
+    def test_extract_batches_streamed_frames(self, mocked_load_model, mocked_stream):
+        model = FakeModel()
+        mocked_load_model.return_value = model
+        image = np.zeros((12, 16, 3), dtype=np.uint8)
+        frames = [
+            {"frame_index": index, "timestamp": index / 30, "image": image}
+            for index in range(5)
+        ]
+        mocked_stream.return_value = (iter(frames), {
+            "total_frames": 5,
+            "fps": 30.0,
+            "duration": 0.167,
+            "sampled_count": 5,
+        })
+
+        result = extract_highlights("ignored.mp4", settings={
+            "batch_size": 2,
+            "tracking": False,
+            "keyframes": False,
+        })
+
+        self.assertEqual(model.predict_calls, 3)
+        self.assertEqual(len(result["detections"]), 5)
 
 
 if __name__ == "__main__":

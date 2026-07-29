@@ -5,13 +5,14 @@ from __future__ import annotations
 import time
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator, Sequence
 
 import cv2
 import numpy as np
 
 from .cv_config import (
     CONFIDENCE_THRESHOLD,
+    INFERENCE_BATCH_SIZE,
     MODEL_DISPLAY_NAME,
     MODEL_PATH,
     MODEL_VERSION,
@@ -79,15 +80,26 @@ def load_model(model_path: str | Path | None = None):
     """Load and cache a local YOLO weight."""
     path = Path(model_path or MODEL_PATH).resolve()
     model_dir = MODEL_PATH.parent.resolve()
-    if model_dir not in path.parents:
-        raise ModelNotFoundError(f"自定义模型必须放在项目 models 目录中: {model_dir}")
+    if path != MODEL_PATH.resolve() and model_dir not in path.parents:
+        raise ModelNotFoundError(f"自定义模型必须放在当前训练权重目录中: {model_dir}")
     if not path.is_file():
         raise ModelNotFoundError(f"YOLO 模型文件不存在: {path}")
     return _load_model_cached(str(path))
 
 
-def sample_frames(video_path: str | Path, sample_interval: int | None = None) -> dict[str, Any]:
-    """Read every Nth frame and retain its exact timestamp."""
+def warmup_model(model_path: str | Path | None = None):
+    """Load the model and run one real inference to initialize the backend."""
+    model = load_model(model_path)
+    dummy = np.zeros((640, 640, 3), dtype=np.uint8)
+    detect_frame(model, dummy, CONFIDENCE_THRESHOLD)
+    return model
+
+
+def stream_sampled_frames(
+    video_path: str | Path,
+    sample_interval: int | None = None,
+) -> tuple[Iterator[dict[str, Any]], dict[str, Any]]:
+    """Open a video and lazily yield every Nth frame with shared metadata."""
     path = _validate_media(video_path, "视频")
     interval = SAMPLE_INTERVAL if sample_interval is None else int(sample_interval)
     if interval < 1:
@@ -100,34 +112,47 @@ def sample_frames(video_path: str | Path, sample_interval: int | None = None) ->
     fps = float(capture.get(cv2.CAP_PROP_FPS))
     if not np.isfinite(fps) or fps <= 0:
         fps = 30.0
-
-    frames: list[dict[str, Any]] = []
-    frame_index = 0
-    try:
-        while True:
-            ok, frame = capture.read()
-            if not ok:
-                break
-            if frame_index % interval == 0:
-                frames.append({
-                    "frame_index": frame_index,
-                    "timestamp": round(frame_index / fps, 3),
-                    "image": frame,
-                })
-            frame_index += 1
-    finally:
-        capture.release()
-
-    if not frames:
-        raise InvalidMediaError(f"视频中没有可解码的有效帧: {path}")
-    actual_total = total_frames if total_frames > 0 else frame_index
-    return {
-        "frames": frames,
-        "total_frames": actual_total,
+    metadata = {
+        "total_frames": max(total_frames, 0),
         "fps": round(fps, 3),
-        "duration": round(actual_total / fps, 3),
-        "sampled_count": len(frames),
+        "duration": round(total_frames / fps, 3) if total_frames > 0 else 0.0,
+        "sampled_count": 0,
     }
+
+    def iterator() -> Iterator[dict[str, Any]]:
+        frame_index = 0
+        try:
+            while True:
+                if frame_index % interval == 0:
+                    ok, frame = capture.read()
+                    if not ok:
+                        break
+                    metadata["sampled_count"] += 1
+                    yield {
+                        "frame_index": frame_index,
+                        "timestamp": round(frame_index / fps, 3),
+                        "image": frame,
+                    }
+                else:
+                    if not capture.grab():
+                        break
+                frame_index += 1
+        finally:
+            capture.release()
+            if metadata["total_frames"] <= 0:
+                metadata["total_frames"] = frame_index
+                metadata["duration"] = round(frame_index / fps, 3)
+
+    return iterator(), metadata
+
+
+def sample_frames(video_path: str | Path, sample_interval: int | None = None) -> dict[str, Any]:
+    """Read every Nth frame and retain its exact timestamp."""
+    frame_stream, metadata = stream_sampled_frames(video_path, sample_interval)
+    frames = list(frame_stream)
+    if not frames:
+        raise InvalidMediaError(f"视频中没有可解码的有效帧: {Path(video_path).resolve()}")
+    return {"frames": frames, **metadata}
 
 
 def _raw_name(model: Any, class_id: int) -> str:
@@ -139,42 +164,62 @@ def _raw_name(model: Any, class_id: int) -> str:
     return str(class_id)
 
 
+def _parse_detections(model: Any, result: Any) -> list[dict[str, Any]]:
+    detections: list[dict[str, Any]] = []
+    for box in result.boxes:
+        class_id = int(box.cls[0])
+        if class_id not in PENTA_KILL_CLASS_IDS:
+            continue
+        confidence = float(box.conf[0])
+        x1, y1, x2, y2 = (float(value) for value in box.xyxy[0])
+        detections.append({
+            "class": OUTPUT_CLASS_NAME,
+            "class_id": 0,
+            "raw_class": _raw_name(model, class_id),
+            "raw_class_id": class_id,
+            "confidence": round(confidence, 4),
+            "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
+        })
+    return detections
+
+
+def detect_frames(
+    model: Any,
+    frames: Sequence[np.ndarray],
+    confidence_threshold: float = CONFIDENCE_THRESHOLD,
+) -> list[list[dict[str, Any]]]:
+    """Run one batched prediction and return detections for every input frame."""
+    threshold = _validate_threshold(confidence_threshold)
+    if not frames:
+        return []
+    if any(frame is None or not isinstance(frame, np.ndarray) or frame.size == 0 for frame in frames):
+        raise InvalidMediaError("输入图像批次中包含空图像")
+    try:
+        results = list(model.predict(
+            list(frames),
+            conf=threshold,
+            classes=sorted(PENTA_KILL_CLASS_IDS),
+            verbose=False,
+        ))
+    except AttributeError:
+        results = list(model(list(frames), conf=threshold, verbose=False))
+    except Exception as error:
+        raise InferenceError(f"YOLO 推理失败: {error}") from error
+    if len(results) != len(frames):
+        raise InferenceError(f"YOLO 返回结果数 {len(results)} 与输入帧数 {len(frames)} 不一致")
+    try:
+        return [_parse_detections(model, result) for result in results]
+    except (AttributeError, IndexError, TypeError, ValueError) as error:
+        raise InferenceError(f"无法解析 YOLO 推理结果: {error}") from error
+
+
 def detect_frame(
     model: Any,
     frame: np.ndarray,
     confidence_threshold: float = CONFIDENCE_THRESHOLD,
 ) -> list[dict[str, Any]]:
-    """Return penta-kill detections; unrelated model classes are discarded."""
-    threshold = _validate_threshold(confidence_threshold)
-    if frame is None or not isinstance(frame, np.ndarray) or frame.size == 0:
-        raise InvalidMediaError("输入图像为空")
-    try:
-        results = model.predict(frame, conf=threshold, verbose=False)
-    except AttributeError:
-        results = model(frame, conf=threshold, verbose=False)
-    except Exception as error:
-        raise InferenceError(f"YOLO 推理失败: {error}") from error
-
-    detections: list[dict[str, Any]] = []
-    try:
-        for result in results:
-            for box in result.boxes:
-                class_id = int(box.cls[0])
-                if class_id not in PENTA_KILL_CLASS_IDS:
-                    continue
-                confidence = float(box.conf[0])
-                x1, y1, x2, y2 = (float(value) for value in box.xyxy[0])
-                detections.append({
-                    "class": OUTPUT_CLASS_NAME,
-                    "class_id": 0,
-                    "raw_class": _raw_name(model, class_id),
-                    "raw_class_id": class_id,
-                    "confidence": round(confidence, 4),
-                    "bbox": [round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1)],
-                })
-    except (AttributeError, IndexError, TypeError, ValueError) as error:
-        raise InferenceError(f"无法解析 YOLO 推理结果: {error}") from error
-    return detections
+    """Return penta-kill detections for one frame."""
+    return detect_frames(model, [frame], confidence_threshold)[0]
 
 
 def calculate_visual_scores(previous: np.ndarray | None, current: np.ndarray) -> tuple[float, float]:
@@ -355,6 +400,35 @@ def _model_metadata(model_path: str | Path | None = None) -> dict[str, Any]:
     }
 
 
+def _process_frame_batch(
+    model: Any,
+    batch: list[dict[str, Any]],
+    confidence: float,
+    tracker: IoUTracker,
+    tracking: bool,
+    frame_results: list[dict[str, Any]],
+    frame_images: dict[int, np.ndarray],
+    previous_gray: np.ndarray | None,
+) -> np.ndarray | None:
+    batch_detections = detect_frames(model, [entry["image"] for entry in batch], confidence)
+    for entry, detections in zip(batch, batch_detections):
+        image = entry["image"]
+        frame_change, motion = calculate_visual_scores(previous_gray, image)
+        previous_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        if tracking:
+            tracker.update(detections, entry["timestamp"])
+        scores = calc_excitement_score(detections, frame_change, motion)
+        frame_results.append({
+            "frame_index": entry["frame_index"],
+            "timestamp": entry["timestamp"],
+            "detections": detections,
+            "scores": scores,
+        })
+        if detections:
+            frame_images[entry["frame_index"]] = image
+    return previous_gray
+
+
 def extract_highlights(
     video_path: str | Path,
     output_dir: str | Path | None = None,
@@ -367,6 +441,9 @@ def extract_highlights(
     sample_interval = int(options.get("sample_interval", SAMPLE_INTERVAL))
     if sample_interval < 1:
         raise ValueError("sample_interval 必须是正整数")
+    batch_size = int(options.get("batch_size", INFERENCE_BATCH_SIZE))
+    if batch_size < 1:
+        raise ValueError("batch_size 必须是正整数")
     tracking = bool(options.get("tracking", True))
     save_keyframes = bool(options.get("keyframes", True))
     model_path = options.get("model_path") or MODEL_PATH
@@ -375,29 +452,36 @@ def extract_highlights(
         raise ValueError(f"不支持的模型版本: {requested_version}，当前版本为 {MODEL_VERSION}")
 
     model = load_model(model_path)
-    sampled = sample_frames(video_path, sample_interval)
+    frame_stream, sampled = stream_sampled_frames(video_path, sample_interval)
     tracker = IoUTracker()
     frame_results: list[dict[str, Any]] = []
     frame_images: dict[int, np.ndarray] = {}
     previous_gray = None
 
-    for item in sampled["frames"]:
-        image = item["image"]
-        detections = detect_frame(model, image, confidence)
-        frame_change, motion = calculate_visual_scores(previous_gray, image)
-        previous_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        if tracking:
-            tracker.update(detections, item["timestamp"])
-        scores = calc_excitement_score(detections, frame_change, motion)
-        record = {
-            "frame_index": item["frame_index"],
-            "timestamp": item["timestamp"],
-            "detections": detections,
-            "scores": scores,
-        }
-        frame_results.append(record)
-        if detections:
-            frame_images[item["frame_index"]] = image
+    batch: list[dict[str, Any]] = []
+    try:
+        for item in frame_stream:
+            batch.append(item)
+            if len(batch) < batch_size:
+                continue
+            previous_gray = _process_frame_batch(
+                model, batch, confidence, tracker, tracking,
+                frame_results, frame_images, previous_gray,
+            )
+            batch.clear()
+
+        if batch:
+            previous_gray = _process_frame_batch(
+                model, batch, confidence, tracker, tracking,
+                frame_results, frame_images, previous_gray,
+            )
+    finally:
+        close_stream = getattr(frame_stream, "close", None)
+        if close_stream:
+            close_stream()
+
+    if not frame_results:
+        raise InvalidMediaError(f"视频中没有可解码的有效帧: {Path(video_path).resolve()}")
 
     highlights = merge_segments(
         frame_results, sampled["fps"], SEGMENT_MIN_DURATION, SEGMENT_MAX_DURATION, sample_interval
@@ -443,6 +527,7 @@ def extract_highlights(
         "parameters": {
             "confidence_threshold": confidence,
             "sample_interval": sample_interval,
+            "batch_size": batch_size,
             "tracking": tracking,
             "keyframes": save_keyframes,
             "top_n_segments": TOP_N_SEGMENTS,

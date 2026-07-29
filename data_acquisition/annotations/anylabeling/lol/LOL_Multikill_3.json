@@ -1,0 +1,27 @@
+{
+  "version": "0.4.36",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "quadra_kill",
+      "text": "",
+      "points": [
+        [
+          324.79919678714856,
+          216.26506024096386
+        ],
+        [
+          476.6064257028112,
+          290.1606425702811
+        ]
+      ],
+      "group_id": null,
+      "shape_type": "rectangle",
+      "flags": {}
+    }
+  ],
+  "imagePath": "..\\..\\..\\raw_images\\lol\\LOL_Multikill_3.jpg",
+  "imageData": null,
+  "imageHeight": 500,
+  "imageWidth": 800
+}

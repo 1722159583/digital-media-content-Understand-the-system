@@ -3,7 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from app import create_app
 from routes.analysis import _local_analysis, _normalize_result
@@ -108,6 +108,7 @@ class ApiTestCase(unittest.TestCase):
         response = protected_app.test_client().post("/api/agent/run", json={"detect_task_id": "missing"})
         self.assertEqual(response.status_code, 401)
 
+    @patch("app.FFMPEG_AVAILABLE", False)
     @patch("app.extract_highlights")
     def test_analysis_report_and_review_lifecycle(self, extract_highlights):
         extract_highlights.return_value = {
@@ -187,10 +188,90 @@ class ApiTestCase(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         rough_cut = response.json["data"]["rough_cut"]
-        self.assertEqual(rough_cut["video_url"], f"/outputs/{job['job_id']}/rough_cut.mp4")
+        self.assertEqual(rough_cut["video_url"], f"/api/jobs/{job['job_id']}/preview_clip")
         self.assertEqual(create_rough_cut.call_args.kwargs["clip_duration"], 6.0)
         saved_report = json.loads((directory / "analysis_report.json").read_text(encoding="utf-8"))
         self.assertEqual(saved_report["rough_cut"]["segment_count"], 1)
+
+    @patch("app.create_rough_cut")
+    @patch("app.FFMPEG_AVAILABLE", True)
+    @patch("app.extract_highlights")
+    def test_analysis_automatically_cuts_highest_scoring_highlight(self, extract_highlights, create_rough_cut):
+        extract_highlights.return_value = {
+            "status": "completed",
+            "video_info": {"duration": 20.0, "fps": 25.0, "total_frames": 500},
+            "highlights": [
+                {"segment_id": 1, "start_time": 1.0, "end_time": 3.0, "score": 0.72},
+                {"segment_id": 2, "start_time": 8.0, "end_time": 10.0, "score": 0.96},
+            ],
+        }
+
+        def create_clip(_input_path, output_path, highlights, **_kwargs):
+            Path(output_path).write_bytes(b"fake-mp4")
+            return {
+                "filename": "rough_cut.mp4",
+                "segment_count": 1,
+                "duration": 5.0,
+                "size": 8,
+                "segments": highlights,
+            }
+
+        create_rough_cut.side_effect = create_clip
+        job = self.create_job(settings={"clip_duration": 5}).json["data"]["job"]
+        analyzed = self.client.post(f"/api/jobs/{job['job_id']}/analyze")
+
+        self.assertEqual(analyzed.status_code, 202)
+        selected = create_rough_cut.call_args.args[2]
+        self.assertEqual([item["segment_id"] for item in selected], [2])
+        current_job = self.client.get(f"/api/jobs/{job['job_id']}").json["data"]["job"]
+        self.assertEqual(current_job["video_clip"], "rough_cut.mp4")
+        self.assertEqual(current_job["rough_cut"]["segment_count"], 1)
+
+        preview = self.client.get(f"/api/jobs/{job['job_id']}/preview_clip")
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.mimetype, "video/mp4")
+        preview.close()
+        download = self.client.get(f"/api/jobs/{job['job_id']}/download_clip")
+        self.assertEqual(download.status_code, 200)
+        self.assertIn("attachment", download.headers["Content-Disposition"])
+        download.close()
+
+    @patch("routes.auth.hash_password", return_value="hashed-password")
+    @patch("routes.auth.create_user", return_value="new-user-id")
+    @patch("routes.auth.get_db")
+    def test_user_registration_validates_and_forces_user_role(self, get_db, create_user, _hash_password):
+        users = MagicMock()
+        users.find_one.side_effect = [None, None]
+        get_db.return_value = {"users": users}
+
+        response = self.client.post("/api/auth/register", json={
+            "username": "new_user",
+            "password": "secret123",
+            "email": "USER@Example.com",
+            "role": "admin",
+        })
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json["data"]["role"], "user")
+        self.assertEqual(response.json["data"]["email"], "user@example.com")
+        create_user.assert_called_once_with(
+            "new_user", "hashed-password", email="user@example.com", role="user"
+        )
+
+    @patch("routes.auth.get_db")
+    def test_user_registration_rejects_duplicate_username(self, get_db):
+        users = MagicMock()
+        users.find_one.return_value = {"username": "existing"}
+        get_db.return_value = {"users": users}
+
+        response = self.client.post("/api/auth/register", json={
+            "username": "existing",
+            "password": "secret123",
+            "email": "user@example.com",
+        })
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("已存在", response.json["msg"])
 
     def test_agent_result_normalization_keeps_extra_fields(self):
         result = _normalize_result({

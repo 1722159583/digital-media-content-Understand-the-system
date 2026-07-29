@@ -294,7 +294,6 @@ async function handleRegister() {
     const passwordInput = document.getElementById("password");
     const confirmPasswordInput = document.getElementById("confirm-password");
     const emailInput = document.getElementById("email");
-    const roleInput = document.getElementById("role");
     const registerBtn = document.getElementById("register-btn");
     
     form.addEventListener("submit", async (event) => {
@@ -305,7 +304,6 @@ async function handleRegister() {
         const password = passwordInput.value.trim();
         const confirmPassword = confirmPasswordInput.value.trim();
         const email = emailInput.value.trim();
-        const role = roleInput.value;
         
         if (!username || !password || !email) {
             showError("register-error", "请填写所有必填字段");
@@ -340,7 +338,7 @@ async function handleRegister() {
             const data = await fetchJSON(`${API_BASE}/auth/register`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ username, password, email, role }),
+                body: JSON.stringify({ username, password, email }),
             });
             
             const responseData = getResponseData(data);

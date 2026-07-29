@@ -15,6 +15,8 @@ def get_db():
     users = _db["users"]
     if "username" not in users.index_information():
         users.create_index("username", unique=True)
+    if "email" not in users.index_information():
+        users.create_index("email", unique=True, sparse=True)
 
     jobs = _db["jobs"]
     if "user_id" not in jobs.index_information():

@@ -15,7 +15,18 @@ class FFmpegError(RuntimeError):
 
 
 def find_ffmpeg(executable: str | None = None) -> str | None:
-    return shutil.which(executable or "ffmpeg")
+    if executable:
+        return shutil.which(executable)
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return system_ffmpeg
+    try:
+        import imageio_ffmpeg
+
+        bundled_ffmpeg = Path(imageio_ffmpeg.get_ffmpeg_exe())
+        return str(bundled_ffmpeg) if bundled_ffmpeg.is_file() else None
+    except (ImportError, OSError, RuntimeError):
+        return None
 
 
 def ffmpeg_available(executable: str | None = None) -> bool:

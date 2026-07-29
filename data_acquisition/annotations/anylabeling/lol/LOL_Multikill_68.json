@@ -1,0 +1,27 @@
+{
+  "version": "0.4.36",
+  "flags": {},
+  "shapes": [
+    {
+      "label": "triple_kill",
+      "text": "",
+      "points": [
+        [
+          431.4127516778523,
+          47.31543624161074
+        ],
+        [
+          456.9161073825503,
+          57.60626398210289
+        ]
+      ],
+      "group_id": null,
+      "shape_type": "rectangle",
+      "flags": {}
+    }
+  ],
+  "imagePath": "..\\..\\..\\raw_images\\lol\\LOL_Multikill_68.jpg",
+  "imageData": null,
+  "imageHeight": 500,
+  "imageWidth": 889
+}

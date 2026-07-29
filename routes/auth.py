@@ -1,4 +1,7 @@
+import re
+
 from flask import Blueprint, request
+from pymongo.errors import DuplicateKeyError
 from utils.db import get_db
 from utils.auth import hash_password, check_password, decode_jwt, generate_jwt, get_current_user
 from utils.response import error, success
@@ -6,33 +9,49 @@ from models.user import find_user_by_username, create_user
 
 auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 
+USERNAME_PATTERN = re.compile(r'^\w{3,20}$', re.UNICODE)
+EMAIL_PATTERN = re.compile(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
+
 @auth_bp.route('/register', methods=['POST'])
 def register():
-    data = request.get_json(silent=True) or {}
-    username = data.get('username')
-    password = data.get('password')
-    email = data.get('email', '')
-    role = data.get('role', 'user')
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return error('请求体必须是 JSON 对象', 400)
+    username = str(data.get('username', '')).strip()
+    password = data.get('password', '')
+    email = str(data.get('email', '')).strip().lower()
 
-    if not username or not password:
-        return error('用户名和密码不能为空', 400)
+    if not username or not password or not email:
+        return error('用户名、密码和邮箱不能为空', 400)
 
-    if len(username) < 3:
-        return error('用户名至少3个字符', 400)
+    if not USERNAME_PATTERN.fullmatch(username):
+        return error('用户名长度应为3-20字符，且只能包含中英文、数字和下划线', 400)
 
-    if len(password) < 6:
+    if not isinstance(password, str) or len(password) < 6:
         return error('密码至少6个字符', 400)
+
+    if len(password) > 128:
+        return error('密码不能超过128个字符', 400)
+
+    if len(email) > 254 or not EMAIL_PATTERN.fullmatch(email):
+        return error('邮箱格式不正确', 400)
 
     db = get_db()
     if db["users"].find_one({"username": username}):
-        return error('用户名已存在', 400)
+        return error('用户名已存在', 409)
+    if db["users"].find_one({"email": email}):
+        return error('邮箱已被注册', 409)
 
-    user_id = create_user(username, hash_password(password), email=email, role=role)
+    try:
+        user_id = create_user(username, hash_password(password), email=email, role='user')
+    except DuplicateKeyError:
+        return error('用户名或邮箱已被注册', 409)
 
     return success({
         'userId': str(user_id),
         'username': username,
-        'role': role,
+        'email': email,
+        'role': 'user',
     }, '注册成功', 201)
 
 @auth_bp.route('/login', methods=['POST'])

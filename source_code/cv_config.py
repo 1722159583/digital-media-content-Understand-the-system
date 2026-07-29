@@ -4,18 +4,19 @@ from pathlib import Path
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-MODEL_PATH = BASE_DIR / "models" / "game_highlight_train4_best.pt"
-TRAIN_RUN_PATH = BASE_DIR / "runs" / "detect" / "train-4"
-MODEL_VERSION = "train-4-penta-only"
-MODEL_DISPLAY_NAME = "YOLO11n penta-kill detector"
+TRAIN_RUN_PATH = BASE_DIR / "runs" / "detect" / "train"
+MODEL_PATH = TRAIN_RUN_PATH / "weights" / "best.pt"
+MODEL_VERSION = "train-best"
+MODEL_DISPLAY_NAME = "YOLO11n game highlight detector"
 
-# train-4 was annotated inconsistently: most penta-kill banners were stored as
-# class 1 (multi_kill). Both learned penta-kill IDs are normalized at the API.
-PENTA_KILL_CLASS_IDS = {0, 1}
+# The current training run uses class 0 for penta-kill, class 1 for triple-kill
+# and class 2 for quadra-kill. This service only exposes penta-kill detections.
+PENTA_KILL_CLASS_IDS = {0}
 OUTPUT_CLASS_NAME = "penta_kill"
 
 CONFIDENCE_THRESHOLD = 0.35
 SAMPLE_INTERVAL = 15
+INFERENCE_BATCH_SIZE = 16
 TOP_N_SEGMENTS = 5
 SEGMENT_MIN_DURATION = 0.0
 SEGMENT_MAX_DURATION = 10.0
@@ -26,6 +27,5 @@ WEIGHT_MOTION = 0.30
 WEIGHT_TARGET_COUNT = 0.40
 
 MODEL_WARNINGS = [
-    "train-4 当前仅用于五杀检测，不支持 multi_kill 或 kill_feed 的可靠识别。",
-    "训练集中五杀样本主要被标为原始 class 1；接口已统一显示为 penta_kill，并保留 raw_class 供追溯。",
+    "当前接口仅输出 penta_kill；模型中的 triple_kill 和 quadra_kill 类别会被过滤。",
 ]

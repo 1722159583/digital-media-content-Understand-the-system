@@ -1,2 +1,4 @@
 multi_kill
 penta_kill
+quadra_kill
+triple_kill

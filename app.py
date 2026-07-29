@@ -40,12 +40,12 @@ except ImportError:
 
 # 导入 CV 模块（如果存在）
 try:
-    from source_code.cv_service import extract_highlights, load_model
+    from source_code.cv_service import extract_highlights, warmup_model
     CV_AVAILABLE = True
 except (ImportError, AttributeError):
     CV_AVAILABLE = False
     extract_highlights = None
-    load_model = None
+    warmup_model = None
 
 try:
     from source_code.ffmpeg_service import FFmpegError, create_rough_cut, ffmpeg_available
@@ -209,6 +209,34 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             ),
         }
 
+    def generate_rough_cut(
+        directory: Path,
+        job: dict[str, Any],
+        report: dict[str, Any],
+        highlights: list[dict[str, Any]],
+        clip_duration: float | None,
+    ) -> dict[str, Any]:
+        input_path = next(path for path in (directory / "input").iterdir() if path.is_file())
+        output_path = directory / "rough_cut.mp4"
+        result = create_rough_cut(
+            input_path,
+            output_path,
+            highlights,
+            clip_duration=clip_duration,
+            video_duration=report.get("video", {}).get("duration"),
+        )
+        rough_cut_result = {
+            **result,
+            "video_url": f"/api/jobs/{job['job_id']}/preview_clip",
+            "download_url": f"/api/jobs/{job['job_id']}/download_clip",
+            "created_at": utc_now(),
+        }
+        report["rough_cut"] = rough_cut_result
+        job["rough_cut"] = rough_cut_result
+        job["video_clip"] = output_path.name
+        job.pop("rough_cut_error", None)
+        return rough_cut_result
+
     def run_analysis(job_id: str) -> None:
         directory, job = get_job(job_id)
         if not directory or not job:
@@ -228,6 +256,16 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             if result.get("status") == "failed":
                 raise RuntimeError(result.get("error", "视频分析失败"))
             report = build_report(directory, job, result)
+            highlights = report.get("highlights", [])
+            if FFMPEG_AVAILABLE and create_rough_cut is not None and highlights:
+                try:
+                    raw_duration = job.get("settings", {}).get("clip_duration", 6)
+                    clip_duration = float(raw_duration) if raw_duration is not None else None
+                    best_highlight = max(highlights, key=lambda item: float(item.get("score", 0)))
+                    generate_rough_cut(directory, job, report, [best_highlight], clip_duration)
+                except (FFmpegError, OSError, StopIteration, TypeError, ValueError) as clip_error:
+                    job["rough_cut_error"] = str(clip_error)
+                    app.logger.warning("Automatic rough cut failed for %s: %s", job_id, clip_error)
             write_json(directory / "analysis_report.json", report)
             job.update(status="completed", completed_at=utc_now(), result_file="analysis_report.json")
         except Exception as error:
@@ -541,32 +579,37 @@ def create_app(config: dict[str, Any] | None = None) -> Flask:
             return error("clip_duration 必须是数字", 400)
 
         try:
-            input_path = next(path for path in (directory / "input").iterdir() if path.is_file())
-            output_path = directory / "rough_cut.mp4"
-            result = create_rough_cut(
-                input_path,
-                output_path,
-                highlights,
-                clip_duration=clip_duration,
-                video_duration=report.get("video", {}).get("duration"),
-            )
+            rough_cut_result = generate_rough_cut(directory, job, report, highlights, clip_duration)
         except StopIteration:
             return error("原始视频文件丢失", 500)
         except (FFmpegError, OSError, ValueError) as exc:
             app.logger.warning("Rough cut failed for %s: %s", job_id, exc)
             return error(str(exc), 422)
 
-        rough_cut_result = {
-            **result,
-            "video_url": f"/outputs/{job_id}/rough_cut.mp4",
-            "download_url": f"/outputs/{job_id}/rough_cut.mp4?download=1",
-            "created_at": utc_now(),
-        }
-        report["rough_cut"] = rough_cut_result
         write_json(report_path, report)
-        job["rough_cut"] = rough_cut_result
         save_job(directory, job)
         return success({"rough_cut": rough_cut_result}, "高光视频生成成功")
+
+    @app.get("/api/jobs/<job_id>/preview_clip")
+    @authenticated
+    def preview_clip(user, job_id: str):
+        directory, _ = get_job(job_id, user.get("user_id"))
+        if not directory or not (directory / "rough_cut.mp4").is_file():
+            return error("剪辑视频不存在", 404)
+        return send_from_directory(directory, "rough_cut.mp4", mimetype="video/mp4")
+
+    @app.get("/api/jobs/<job_id>/download_clip")
+    @authenticated
+    def download_clip(user, job_id: str):
+        directory, _ = get_job(job_id, user.get("user_id"))
+        if not directory or not (directory / "rough_cut.mp4").is_file():
+            return error("剪辑视频不存在", 404)
+        return send_from_directory(
+            directory,
+            "rough_cut.mp4",
+            as_attachment=True,
+            download_name=f"{job_id}_highlight.mp4",
+        )
 
     @app.get("/outputs/<job_id>/<path:filename>")
     @authenticated
@@ -588,9 +631,9 @@ if __name__ == "__main__":
     parser.add_argument("--skip-model-preload", action="store_true", help="跳过启动阶段的模型预热")
     args = parser.parse_args()
     if not args.skip_model_preload:
-        if not CV_AVAILABLE or load_model is None:
+        if not CV_AVAILABLE or warmup_model is None:
             raise RuntimeError("CV 模块未就绪，无法预热五杀检测模型")
         print("正在预热五杀检测模型...")
-        load_model()
+        warmup_model()
         print("模型预热完成。")
     app.run(host=args.host, port=args.port, debug=False)

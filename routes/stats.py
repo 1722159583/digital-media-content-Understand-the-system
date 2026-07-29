@@ -188,17 +188,19 @@ def video_time(user):
 @login_required
 def model_metric(user):
     """汇总多模型检测精度数据，支撑模型对比可视化"""
+    from source_code.cv_config import MODEL_PATH, MODEL_VERSION
+
     data = [{
-        "model": "train-4-penta-only",
-        "mAP50": 0.995,
-        "mAP50_95": 0.7835,
-        "map50": 0.995,
-        "map50_95": 0.7835,
-        "precision": 0.9886,
-        "recall": 1.0,
+        "model": MODEL_VERSION,
+        "mAP50": 0.745,
+        "mAP50_95": 0.59844,
+        "map50": 0.745,
+        "map50_95": 0.59844,
+        "precision": 0.93588,
+        "recall": 0.75,
         "inferenceTime": None,
-        "modelSize": round((Path(__file__).resolve().parent.parent / "models" / "game_highlight_train4_best.pt").stat().st_size / 1024 / 1024, 2),
-        "scope": "small validation set; penta_kill only",
+        "modelSize": round(MODEL_PATH.stat().st_size / 1024 / 1024, 2),
+        "scope": "train validation set; penta_kill, triple_kill, quadra_kill",
     }]
     return success({
         "metrics": data,

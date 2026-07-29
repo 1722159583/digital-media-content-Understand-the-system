@@ -5,4 +5,4 @@ test: ./test/images
 
 # 类别配置
 nc: 3
-names: ['penta_kill', 'multi_kill', 'kill_feed' ]
+names: ['penta_kill', 'triple_kill', 'quadra_kill' ]
