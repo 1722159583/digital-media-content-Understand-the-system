@@ -1,4 +1,4 @@
-"""COZE workflow Agent routes, based on the dedicated Agent branch."""
+﻿"""COZE workflow Agent routes, based on the dedicated Agent branch."""
 
 import json
 import uuid
@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, request
 
-from agent.services.coze_client import CozeClient
+from agent.services.coze_client import CozeClient, CozeAgentClient
 from routes.knowledge import chroma_client, get_embedding_model
 from utils.auth import login_required
 from utils.db import get_db
@@ -351,6 +351,126 @@ def health():
         "workflow_id": _coze.workflow_id,
         "status": "configured" if _coze.ready else "local_only",
     })
+
+
+
+@analysis_bp.route("/describe_highlight", methods=["POST"])
+@login_required
+def describe_highlight(user):
+    """根据 YOLO 检测结果生成高光解说，支持 job_id 或直接传 detection_result"""
+    data = request.get_json(silent=True) or {}
+    job_id = data.get("job_id")
+    detection_result = data.get("detection_result")
+
+    highlights = []
+
+    if job_id:
+        report_path = OUTPUT_DIR / job_id / "analysis_report.json"
+        if report_path.is_file():
+            with report_path.open("r", encoding="utf-8") as f:
+                report = json.load(f)
+            highlights = report.get("highlights", [])
+
+    if not highlights and detection_result:
+        highlights = detection_result if isinstance(detection_result, list) else detection_result.get("highlights", [])
+
+    if not highlights:
+        return error("请提供 job_id 或 detection_result", 400)
+
+    # 如果没有 job_id 就用 demo
+    if not job_id:
+        job_id = "demo"
+
+    input_data = {
+        "job_id": job_id,
+        "highlights": [
+            {
+                "segment_id": h.get("segment_id", i + 1),
+                "start_time": h.get("start_time", 0),
+                "end_time": h.get("end_time", 0),
+                "score": round(h.get("score", 0), 4),
+                "detection_count": h.get("detection_count", 0),
+                "reason": h.get("reason", ""),
+            }
+            for i, h in enumerate(highlights)
+        ],
+    }
+
+    try:
+        agent = CozeAgentClient()
+        response = agent.chat(json.dumps(input_data, ensure_ascii=False))
+        try:
+            result = json.loads(response)
+        except json.JSONDecodeError:
+            result = {"raw": response}
+        return success({"highlights": highlights, "analysis": result}, "描述生成成功")
+    except Exception as exc:
+        return error(f"Agent 调用失败: {str(exc)}", 500)
+
+
+@analysis_bp.route("/agent_info", methods=["GET"])
+def agent_info():
+    """返回当前 Agent 配置信息"""
+    return success({
+        "bot_id": CozeAgentClient.AGENT_BOT_ID,
+        "engine": "coze_agent",
+        "plugins": ["code_executor", "web_search"],
+        "knowledge_base": "game_terminology",
+    })
+
+
+
+@analysis_bp.route("/describe_style", methods=["POST"])
+@login_required
+def describe_style(user):
+    """根据 YOLO 检测结果生成多风格解说，支持 job_id 或直接传 detection_result"""
+    data = request.get_json(silent=True) or {}
+    job_id = data.get("job_id")
+    detection_result = data.get("detection_result")
+
+    highlights = []
+
+    if job_id:
+        report_path = OUTPUT_DIR / job_id / "analysis_report.json"
+        if report_path.is_file():
+            with report_path.open("r", encoding="utf-8") as f:
+                report = json.load(f)
+            highlights = report.get("highlights", [])
+
+    if not highlights and detection_result:
+        highlights = detection_result if isinstance(detection_result, list) else detection_result.get("highlights", [])
+
+    if not highlights:
+        return error("请提供 job_id 或 detection_result", 400)
+
+    if not job_id:
+        job_id = "demo"
+
+    input_data = {
+        "job_id": job_id,
+        "highlights": [
+            {
+                "segment_id": h.get("segment_id", i + 1),
+                "start_time": h.get("start_time", 0),
+                "end_time": h.get("end_time", 0),
+                "score": round(h.get("score", 0), 4),
+                "detection_count": h.get("detection_count", 0),
+                "reason": h.get("reason", ""),
+            }
+            for i, h in enumerate(highlights)
+        ],
+    }
+
+    try:
+        agent = CozeAgentClient(bot_id="7667809925225234432")
+        response = agent.chat(json.dumps(input_data, ensure_ascii=False))
+        try:
+            result = json.loads(response)
+        except json.JSONDecodeError:
+            result = {"raw": response}
+        return success({"highlights": highlights, "analysis": result}, "多风格解说生成成功")
+    except Exception as exc:
+        return error(f"Agent 调用失败: {str(exc)}", 500)
 
 
 def register_agent_routes(app):

@@ -114,9 +114,151 @@
                     <p class="loading-text">加载会话记录中...</p>
                 </div>
             </section>
-        </main>
+        
+            </section>
+
+            <section class="agent-section" style="margin-top: 30px; border-top: 2px solid #2a313c; padding-top: 20px;">
+                <div class="section-header">
+                    <h2>🎙️ 高光描述生成</h2>
+                    <button id="describe-highlight-btn" class="btn-primary">🎬 生成高光描述</button>
+                </div>
+                <div class="agent-form">
+                    <div class="form-group">
+                        <label>选择已完成检测任务</label>
+                        <select id="hl-job-select"><option value="">请选择任务</option></select>
+                    </div>
+                </div>
+                <div id="hl-output" style="display:none;"><button id="hl-export-md" style="background:#2a6d2a;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;margin-bottom:10px;">⤵️ 导出 MD</button><div id="hl-list"></div></div>
+                <div id="hl-error" class="error-message" style="display:none;"></div>
+            </section>
+
+            <section class="agent-section" style="margin-top: 30px; border-top: 2px solid #2a313c; padding-top: 20px;">
+                <div class="section-header">
+                    <h2>🎭 多风格解说生成</h2>
+                    <button id="describe-style-btn" class="btn-primary">🎬 生成多风格解说</button>
+                </div>
+                <div class="agent-form">
+                    <div class="form-group">
+                        <label>选择已完成检测任务</label>
+                        <select id="hl-style-select"><option value="">请选择任务</option></select>
+                    </div>
+                </div>
+                <div id="hl-style-output" style="display:none;"><button id="hl-style-export-md" style="background:#2a6d2a;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;margin-bottom:10px;">⤵️ 导出 MD</button><div id="hl-style-list"></div></div>
+                <div id="hl-style-error" class="error-message" style="display:none;"></div>
+            </section>
+
+    </main>
     </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
+
+<script>
+(async function() {
+    const sel = document.getElementById("hl-job-select");
+    const btn = document.getElementById("describe-highlight-btn");
+    const out = document.getElementById("hl-output");
+    const lst = document.getElementById("hl-list");
+    const err = document.getElementById("hl-error");
+    
+    document.getElementById("hl-export-md").onclick = function() {
+        var items = document.querySelectorAll("#hl-list > div");
+        if (items.length === 0) { alert("\u6ca1\u6709\u53ef\u5bfc\u51fa\u7684\u5185\u5bb9"); return; }
+        var md = "# \u9ad8\u5149\u63cf\u8ff0\u62a5\u544a\n\n";
+        for (var i = 0; i < items.length; i++) {
+            md += "## \u9ad8\u5149 #" + (i+1) + "\n\n" + (items[i].innerText || items[i].textContent) + "\n\n---\n\n";
+        }
+        var blob = new Blob([md], {type: "text/markdown;charset=utf-8"});
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "highlight_report_" + new Date().toISOString().slice(0,10) + ".md";
+        a.click();
+    };
+async function loadJobs() {
+        try {
+            const r = await fetchJSON("/api/jobs");
+            const d = getResponseData(r);
+            const jobs = (d.jobs || d.list || []).filter(j => j.status === "completed");
+            sel.innerHTML = '<option value="">请选择任务</option>' + jobs.map(j => '<option value="' + j.job_id + '">' + (j.asset_name || j.job_id) + '</option>').join("");
+        } catch(e) { console.error(e); }
+    }
+    btn.addEventListener("click", async function() {
+        if (!sel.value) { alert("请先选择一个已完成的检测任务"); return; }
+        btn.disabled = true; btn.textContent = "生成中..."; out.style.display = "none"; err.style.display = "none";
+        try {
+            const r = await fetchJSON("/api/agent/describe_highlight", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({job_id:sel.value})});
+            const d = getResponseData(r);
+            const items = (d.analysis && Array.isArray(d.analysis)) ? d.analysis : [d.analysis || {}];
+            lst.innerHTML = items.map(function(item,i) {
+                const h = (d.highlights||[])[i]||{};
+                return '<div style="background:#1a2a3a;border-radius:8px;padding:15px;margin:10px 0;">'
+                    + '<div style="display:flex;justify-content:space-between;align-items:center;"><strong style="color:#4fc3f7;">🎬 高光 #'+(h.segment_id||i+1)+'</strong>'
+                    + '<span style="background:'+(item["精彩程度"]==="史诗级"?"#ff9800":item["精彩程度"]==="非常精彩"?"#4caf50":"#2196f3")+';padding:2px 10px;border-radius:12px;font-size:12px;color:#fff;">'+(item["精彩程度"]||"")+'</span></div>'
+                    + '<p style="margin:8px 0;color:#ddd;">📝 '+(item["片段描述"]||"")+'</p>'
+                    + '<p style="margin:8px 0;color:#ffd54f;font-style:italic;">🎤 '+(item["解说文案"]||"")+'</p>'
+                    + '<div style="font-size:12px;color:#999;">⏱ '+(h.start_time||0).toFixed(1)+'s - '+(h.end_time||0).toFixed(1)+'s | 评分: '+(h.score||0).toFixed(3)+' | 检测数: '+(h.detection_count||0)+'</div>'
+                    + '<div style="margin-top:6px;">'+((item["关键元素"]||[]).map(function(k){return '<span style="background:#37474f;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px;margin:2px;">'+k+'</span>';}).join(""))+'</div></div>';
+            }).join("");
+            out.style.display = "block";
+        } catch(ex) { err.textContent = "失败: "+ex.message; err.style.display = "block"; }
+        finally { btn.disabled = false; btn.textContent = "🎬 生成高光描述"; }
+    });
+    await loadJobs();
+})();
+
+(async function() {
+    const sel = document.getElementById("hl-style-select");
+    const btn = document.getElementById("describe-style-btn");
+    const out = document.getElementById("hl-style-output");
+    const lst = document.getElementById("hl-style-list");
+    const err = document.getElementById("hl-style-error");
+    
+    document.getElementById("hl-style-export-md").onclick = function() {
+        var items = document.querySelectorAll("#hl-style-list > div");
+        if (items.length === 0) { alert("\u6ca1\u6709\u53ef\u5bfc\u51fa\u7684\u5185\u5bb9"); return; }
+        var md = "# \u591a\u98ce\u683c\u89e3\u8bf4\u62a5\u544a\n\n";
+        for (var i = 0; i < items.length; i++) {
+            md += "## \u89e3\u8bf4 #" + (i+1) + "\n\n" + (items[i].innerText || items[i].textContent) + "\n\n---\n\n";
+        }
+        var blob = new Blob([md], {type: "text/markdown;charset=utf-8"});
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "style_commentary_" + new Date().toISOString().slice(0,10) + ".md";
+        a.click();
+    };
+async function loadJobs() {
+        try {
+            const r = await fetchJSON("/api/jobs");
+            const d = getResponseData(r);
+            const jobs = (d.jobs || d.list || []).filter(j => j.status === "completed");
+            sel.innerHTML = '<option value="">请选择任务</option>' + jobs.map(j => '<option value="' + j.job_id + '">' + (j.asset_name || j.job_id) + '</option>').join("");
+        } catch(e) { console.error(e); }
+    }
+    btn.addEventListener("click", async function() {
+        if (!sel.value) { alert("请先选择一个已完成的检测任务"); return; }
+        btn.disabled = true; btn.textContent = "生成中..."; out.style.display = "none"; err.style.display = "none";
+        try {
+            const r = await fetchJSON("/api/agent/describe_style", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({job_id:sel.value})});
+            const d = getResponseData(r);
+            const items = (d.analysis && Array.isArray(d.analysis)) ? d.analysis : [d.analysis || {}];
+            lst.innerHTML = items.map(function(item,i) {
+                const h = (d.highlights||[])[i]||{}; const st = item["风格解说"]||{};
+                return '<div style="background:#1a2a3a;border-radius:8px;padding:15px;margin:10px 0;">'
+                    + '<div style="display:flex;justify-content:space-between;margin-bottom:8px;"><strong style="color:#4fc3f7;">🎬 高光 #'+(h.segment_id||i+1)+'</strong>'
+                    + '<span style="background:#ff9800;padding:2px 10px;border-radius:12px;font-size:12px;color:#fff;">推荐: '+(item["推荐风格"]||"")+'</span></div>'
+                    + '<p style="margin:8px 0;color:#ddd;">📝 '+(item["片段描述"]||"")+'</p>'
+                    + '<div style="margin:10px 0;border-top:1px solid #333;padding-top:10px;">'
+                    + '<div style="margin:6px 0;padding:8px;background:#0d1b2a;border-radius:6px;border-left:3px solid #4fc3f7;"><small style="color:#4fc3f7;">🏆 专业电竞风</small><p style="margin:4px 0;color:#fff;">'+(st["专业电竞风"]||"")+'</p></div>'
+                    + '<div style="margin:6px 0;padding:8px;background:#0d1b2a;border-radius:6px;border-left:3px solid #ffd54f;"><small style="color:#ffd54f;">😂 幽默娱乐风</small><p style="margin:4px 0;color:#fff;">'+(st["幽默娱乐风"]||"")+'</p></div>'
+                    + '<div style="margin:6px 0;padding:8px;background:#0d1b2a;border-radius:6px;border-left:3px solid #ff9800;"><small style="color:#ff9800;">⚡ 简短爆发风</small><p style="margin:4px 0;color:#fff;">'+(st["简短爆发风"]||"")+'</p></div></div>'
+                    + '<div style="font-size:12px;color:#999;">⏱ '+(h.start_time||0).toFixed(1)+'s - '+(h.end_time||0).toFixed(1)+'s | 评分: '+(h.score||0).toFixed(3)+'</div></div>';
+            }).join("");
+            out.style.display = "block";
+        } catch(ex) { err.textContent = "失败: "+ex.message; err.style.display = "block"; }
+        finally { btn.disabled = false; btn.textContent = "🎬 生成多风格解说"; }
+    });
+    await loadJobs();
+})();
+</script>
+
 </body>
 </html>
